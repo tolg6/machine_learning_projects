@@ -1,0 +1,621 @@
+---
+title: "Kredi Kabul Analizi ve SVM Modeli"
+output:
+  rmdformats::readthedown
+---
+
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+url = "https://miro.medium.com/max/1200/1*hAMUkRqnWVn4fxTjCNJP1w.jpeg"
+```
+
+<center><img src="`r url`"></center>
+
+# Hazırlayanlar
+
+- **Tolga Kurt**
+
+
+
+# Amaç
+* Müşterinin banka tarafından sunulan kişisel krediyi kabul edip etmeyeceğini tahmin etmek için SVM sınıflandırma modeli oluşturmak.
+
+
+
+
+
+
+
+# Kütüphaneler 
+```{r,warning=FALSE,message=FALSE}
+library(dplyr)
+library(ggplot2)
+library(vtable)
+library(ggthemes)
+library(gridExtra)
+library(scales)
+library(caret)
+library(e1071)
+library(GGally)
+library(rmdformats)
+library(ROCR)
+```
+
+# Veriye Ön Bakış
+
+
+```{r}
+UniversalBank = read.csv("C:/Users/tolga/Downloads/UniversalBank.csv")
+head(UniversalBank)
+str(UniversalBank)
+```
+
+
+* Verimiz 5000 satır ve 14 sütundan oluşmaktadır. Hedef değişkenimiz Personal.Loan değişkenidir. 
+
+## Değişen Tanımlamaları
+
+* ID - Müşteri ID
+
+* Age - Müşterinin Yaşı
+
+* Experience - Profesyonel Çalışma Deneyimi Yılı
+
+* Income - Yıllık kazanç ($000)
+
+* ZIPCode - Ev Adres Kodu.
+
+* Family - Müşterinin Aile Ferdi Sayı
+
+* CCAvg - Aylık Ortalama Kredi Kartı Harcaması ($000)
+
+* Education - Eğitim Düzeyi. 1: Lisans ; 2: Lisansüstü; 3: Yetkin/Profesyonel
+
+* Mortgage - Eğer varsa evin Mortgage değeri ($000)
+
+* Personal Loan - Bu müşteri son kampanyada sunulan ihtiyaç kredisini kabul etti mi? (Hedef Değişken)
+
+* Securities Account - Müşteri,bankada güvenli bir hesaba sahip mi ?
+
+* CD Account - Müşterinin bankada mevduat sertifikası (CD) hesabı var mı?
+
+* Online - Müşteri internet bankacılığı kullanıyor mu ?
+
+* CreditCard - Müşteri UniversalBank'tan kredi kartı kullanıyor mu ? 
+
+
+*Verimizde 6 tane binary veya kategorik, 7 tane de nümerik değişken vardır. Binary değişkenleri kategorik değişkene çevirelim ve ID ile ZIPCode değişkenlerini bize bir bilgi sağlamadıkları için verimizden çıkaralım.
+
+```{r}
+UniversalBank$Education<-as.factor(UniversalBank$Education)
+UniversalBank$Personal.Loan<-as.factor(UniversalBank$Personal.Loan)
+UniversalBank$Securities.Account<-as.factor(UniversalBank$Securities.Account)
+UniversalBank$CD.Account<-as.factor(UniversalBank$CD.Account)
+UniversalBank$Online<-as.factor(UniversalBank$Online)
+UniversalBank$CreditCard<-as.factor(UniversalBank$CreditCard)
+UniversalBank = UniversalBank%>%select(-ID,-ZIP.Code)
+```
+
+# Özet İstatistikler
+
+
+```{r}
+st(UniversalBank)
+```
+
+* Verimizde Age değişkeninin ortalaması 45.33 standart sapması 11.46'dır. Minimum 23 max ise 67 yaşındaki değerler bulunmaktadır.
+* Verimizde Income değişkeninin ortalaması 73.77 standart sapması 46.034'tür. Minimum 8(000$) max ise 224(000 $) değerinde yıllık gelirler bulunmaktadır.
+* Verimizde Family değişkeninin ortalaması 2.39 standart sapması 1.148'dir. Minimum 1 max ise 4 kişilik aileler bulunmaktadır.
+* Education değişkeninin %41.9'u 1(Undergrad), %28.1'i 2(Graduate), %30'u 3(Professional) olarak dağılmaktadır.
+* Personal.Loan değişkeninin %90,4'ü 0(No), %9.6'sı 1(Yes) olarak dağılmaktadır.
+* Securities.Account değişkeninin %89,6'sı 0(No), 10,4'ü 1(Yes) olarak dağılmaktadır.
+* CD.Account değişkeninin %94'ü 0(No), %6'sı 1(Yes) olarak dağılmaktadır. 
+* Online değişkeninin %40.3'ü 0(No), %59,7'sı 1(Yes) olarak dağılmaktadır.
+* CreditCard değişkeninin %70.6'sı 0(No), %29,4'ü 1(Yes) olarak dağılmaktadır.
+
+
+
+
+# Veri Görselleştirme
+
+## Saçılım ve Dağılım Grafikleri 
+
+### Age
+
+```{r warning=FALSE}
+p1 = ggplot(UniversalBank,aes(x = seq(1,dim(UniversalBank)[1]),y = Age,colour = Personal.Loan))+geom_point(size = 2)+xlab("")+ylab("Age")+theme_classic()+
+  theme(axis.title.x = element_text(colour = "#000000"),
+         axis.title.y = element_text(colour = "#000000"),
+         plot.title = element_text(colour = "#000000"),
+         axis.text.x  = element_text(colour = "#000000"),
+         axis.text.y = element_text(colour = "#000000"),
+         axis.line = element_line(colour = "#000000"),
+         legend.text = element_text(colour = "#000000"),
+         legend.title = element_text(colour = "#000000"))
+
+d1 = ggplot()+geom_density(data=UniversalBank, aes(x = Age), size=1,fill = "#2109f7",colour = "#2109f7",alpha = 0.5)+
+  theme_base() + 
+  theme(panel.background=element_blank(),
+        panel.border = element_blank(),
+        plot.background=element_blank(),
+        text = element_text(colour="black"),
+        axis.text.y = element_blank(),
+        line = element_line(colour="black")) +
+  theme()+ylab("")+xlab("Age")+ggtitle("Age")
+
+grid.arrange(arrangeGrob(p1,ncol = 1,name = "Age"),d1)
+
+```
+* Age değişkeninin grafiğini incelediğimizde Personal.Loan ile gruplandırıldığında rastgele bir dağılımı vardır. Density plot incelendiğinde ise 3 tepeli bir yapı vardır.
+
+
+### Experience
+
+```{r warning=FALSE}
+
+p2 = ggplot(UniversalBank,aes(x = seq(1,dim(UniversalBank)[1]),y = Experience,colour = Personal.Loan))+geom_point(size = 2)+xlab("")+ylab("Experience")+theme_classic()+
+  theme(axis.title.x = element_text(colour = "#000000"),
+         axis.title.y = element_text(colour = "#000000"),
+         plot.title = element_text(colour = "#000000"),
+         axis.text.x  = element_text(colour = "#000000"),
+         axis.text.y = element_text(colour = "#000000"),
+         axis.line = element_line(colour = "#000000"),
+         legend.text = element_text(colour = "#000000"),
+         legend.title = element_text(colour = "#000000"))
+
+d2 = ggplot()+geom_density(data=UniversalBank, aes(x = Experience), size=1,fill = "#2109f7",colour = "#2109f7",alpha = 0.5)+
+  theme_base() + 
+  theme(panel.background=element_blank(),
+        panel.border = element_blank(),
+        plot.background=element_blank(),
+        text = element_text(colour="black"),
+        axis.text.y = element_blank(),
+        line = element_line(colour="black")) +
+  theme()+ylab("")+xlab("Experience")+ggtitle("Experience")
+
+grid.arrange(arrangeGrob(p2,ncol = 1,name = "Age"),d2)
+
+```
+
+* Experience değişkeninin grafiğini incelediğimizde Personal.Loan ile gruplandırıldığında rastgele bir dağılımı vardır. Density plot incelendiğinde ise dengeli bir dağılımı vardır.
+
+
+### Income
+
+```{r warning=FALSE}
+p3 = ggplot(UniversalBank,aes(x = seq(1,dim(UniversalBank)[1]),y = Income,colour = Personal.Loan))+geom_point(size = 2)+xlab("")+ylab("Income")+theme_classic()+
+  theme(axis.title.x = element_text(colour = "#000000"),
+         axis.title.y = element_text(colour = "#000000"),
+         plot.title = element_text(colour = "#000000"),
+         axis.text.x  = element_text(colour = "#000000"),
+         axis.text.y = element_text(colour = "#000000"),
+         axis.line = element_line(colour = "#000000"),
+         legend.text = element_text(colour = "#000000"),
+         legend.title = element_text(colour = "#000000"))
+
+d3 = ggplot()+geom_density(data=UniversalBank, aes(x = Income), size=1,fill = "#2109f7",colour = "#2109f7",alpha = 0.5)+
+  theme_base() + 
+  theme(panel.background=element_blank(),
+        panel.border = element_blank(),
+        plot.background=element_blank(),
+        text = element_text(colour="black"),
+        axis.text.y = element_blank(),
+        line = element_line(colour="black")) +
+  theme()+ylab("")+xlab("Income")+ggtitle("Income")
+
+grid.arrange(arrangeGrob(p3,ncol = 1,name = "Income"),d3)
+```
+
+* Income değişkeninin grafiğini incelediğimizde Personal.Loan ile gruplandırıldığında Personal.Loan = 1 olan değişkenlerin daha yüksek yıllık gelire sahip olduğu görülebilir. Density plot incelendiğinde ise sağa çarpık bir grafik vardır.
+
+
+### Family
+
+```{r warning=FALSE}
+p4 = ggplot(UniversalBank,aes(x = seq(1,dim(UniversalBank)[1]),y = Family,colour = Personal.Loan))+geom_point(size = 2)+xlab("")+ylab("Family")+theme_classic()+
+  theme(axis.title.x = element_text(colour = "#000000"),
+         axis.title.y = element_text(colour = "#000000"),
+         plot.title = element_text(colour = "#000000"),
+         axis.text.x  = element_text(colour = "#000000"),
+         axis.text.y = element_text(colour = "#000000"),
+         axis.line = element_line(colour = "#000000"),
+         legend.text = element_text(colour = "#000000"),
+         legend.title = element_text(colour = "#000000"))
+
+d4 = ggplot()+geom_density(data=UniversalBank, aes(x = Family), size=1,fill = "#2109f7",colour = "#2109f7",alpha = 0.5)+
+  theme_base() + 
+  theme(panel.background=element_blank(),
+        panel.border = element_blank(),
+        plot.background=element_blank(),
+        text = element_text(colour="black"),
+        axis.text.y = element_blank(),
+        line = element_line(colour="black")) +
+  theme()+ylab("")+xlab("Family")+ggtitle("Family")
+
+grid.arrange(arrangeGrob(p4,ncol = 1,name = "Family"),d4)
+```
+
+* Family değişkeni kesikli değişken olduğu için birden fazla tepeli bir yapı vardır. En yüksek tepe 1 değişkeninde mevcuttur.
+
+## CCAvg
+
+```{r}
+p5 = ggplot(UniversalBank,aes(x = seq(1,dim(UniversalBank)[1]),y = CCAvg,colour = Personal.Loan))+geom_point(size = 2)+xlab("")+ylab("CCAvg")+theme_classic()+
+  theme(axis.title.x = element_text(colour = "#000000"),
+         axis.title.y = element_text(colour = "#000000"),
+         plot.title = element_text(colour = "#000000"),
+         axis.text.x  = element_text(colour = "#000000"),
+         axis.text.y = element_text(colour = "#000000"),
+         axis.line = element_line(colour = "#000000"),
+         legend.text = element_text(colour = "#000000"),
+         legend.title = element_text(colour = "#000000"))
+
+d5 = ggplot()+geom_density(data=UniversalBank, aes(x = CCAvg), size=1,fill = "#2109f7",colour = "#2109f7",alpha = 0.5)+
+  theme_base() + 
+  theme(panel.background=element_blank(),
+        panel.border = element_blank(),
+        plot.background=element_blank(),
+        text = element_text(colour="black"),
+        axis.text.y = element_blank(),
+        line = element_line(colour="black")) +
+  theme()+ylab("")+xlab("CCAvg")+ggtitle("CCAvg")
+
+grid.arrange(arrangeGrob(p5,ncol = 1,name = "CCAvg"),d5)
+
+```
+
+* CCAvg grafiği incelendiğinde sağa çarpık bir yapı mevcuttur.
+
+
+ 
+# Bağımsız Değişkenlerin Karşılıklı Grafikleri
+
+```{r}
+# İkili Karşılaştırmalar
+
+# Age-Experience
+plot0 <- ggplot(UniversalBank) +
+  geom_point(aes(x = Age, y = Experience, colour = Personal.Loan)) +
+  labs(
+    title = "Age ve Experience",
+    x = "Age",
+    y = "Experience",
+    colour = "Personal Loan"
+  )+theme(axis.title.x = element_text(colour = "#000000"),
+                           axis.title.y = element_text(colour = "#000000"),
+                           plot.title = element_text(colour = "#000000"),
+                           axis.text.x  = element_text(colour = "#000000"),
+                           axis.text.y = element_text(colour = "#000000"),
+                           axis.line = element_line(colour = "#000000"),
+                           legend.text = element_text(colour = "#000000"),
+                           legend.title = element_text(colour = "#000000"))
+
+# Age ve Income
+plot1 <- ggplot(UniversalBank) +
+  geom_point(aes(x = Age, y = Income, colour = Personal.Loan)) +
+  labs(
+    title = "Age ve Income",
+    x = "Age",
+    y = "Income",
+    colour = "Personal Loan"
+  )+theme(axis.title.x = element_text(colour = "#000000"),
+                           axis.title.y = element_text(colour = "#000000"),
+                           plot.title = element_text(colour = "#000000"),
+                           axis.text.x  = element_text(colour = "#000000"),
+                           axis.text.y = element_text(colour = "#000000"),
+                           axis.line = element_line(colour = "#000000"),
+                           legend.text = element_text(colour = "#000000"),
+                           legend.title = element_text(colour = "#000000"))
+
+
+# Age-CCAvg
+plot2 <- ggplot(UniversalBank) +
+  geom_point(aes(x = Age, y = CCAvg, colour = Personal.Loan)) +
+  labs(
+    title = "Age ve CCAvg",
+    x = "Age",
+    y = "CCAvg",
+    colour = "Personal Loan"
+  )+theme(axis.title.x = element_text(colour = "#000000"),
+                           axis.title.y = element_text(colour = "#000000"),
+                           plot.title = element_text(colour = "#000000"),
+                           axis.text.x  = element_text(colour = "#000000"),
+                           axis.text.y = element_text(colour = "#000000"),
+                           axis.line = element_line(colour = "#000000"),
+                           legend.text = element_text(colour = "#000000"),
+                           legend.title = element_text(colour = "#000000"))
+
+plot3 <- ggplot(UniversalBank) +
+  geom_point(aes(x = Age, y = Mortgage, colour = Personal.Loan)) +
+  labs(
+    title = "Age ve Mortgage",
+    x = "Age",
+    y = "Mortgage",
+    colour = "Personal Loan"
+  )+theme(axis.title.x = element_text(colour = "#000000"),
+                           axis.title.y = element_text(colour = "#000000"),
+                           plot.title = element_text(colour = "#000000"),
+                           axis.text.x  = element_text(colour = "#000000"),
+                           axis.text.y = element_text(colour = "#000000"),
+                           axis.line = element_line(colour = "#000000"),
+                           legend.text = element_text(colour = "#000000"),
+                           legend.title = element_text(colour = "#000000"))
+
+plot4 <- ggplot(UniversalBank) +
+  geom_point(aes(x = Experience, y =Income, colour = Personal.Loan)) +
+  labs(
+    title = "Experience ve Income",
+    y = "Income",
+    x = "Experience",
+    colour = "Personal Loan"
+  )+theme(axis.title.x = element_text(colour = "#000000"),
+                           axis.title.y = element_text(colour = "#000000"),
+                           plot.title = element_text(colour = "#000000"),
+                           axis.text.x  = element_text(colour = "#000000"),
+                           axis.text.y = element_text(colour = "#000000"),
+                           axis.line = element_line(colour = "#000000"),
+                           legend.text = element_text(colour = "#000000"),
+                           legend.title = element_text(colour = "#000000"))
+
+plot5 <- ggplot(UniversalBank) +
+  geom_point(aes(x = Experience, y =CCAvg, colour = Personal.Loan)) +
+  labs(
+    title = "Experience ve CCAvg",
+    y = "CCAvg",
+    x = "Experience",
+    colour = "Personal Loan"
+  )+theme(axis.title.x = element_text(colour = "#000000"),
+                           axis.title.y = element_text(colour = "#000000"),
+                           plot.title = element_text(colour = "#000000"),
+                           axis.text.x  = element_text(colour = "#000000"),
+                           axis.text.y = element_text(colour = "#000000"),
+                           axis.line = element_line(colour = "#000000"),
+                           legend.text = element_text(colour = "#000000"),
+                           legend.title = element_text(colour = "#000000"))
+
+
+plot6 <- ggplot(UniversalBank) +
+  geom_point(aes(x = Income, y =CCAvg, colour = Personal.Loan)) +
+  labs(
+    title = "Income ve CCAvg",
+    x = "Income",
+    y = "CCAvg",
+    colour = "Personal Loan"
+  )+theme(axis.title.x = element_text(colour = "#000000"),
+                           axis.title.y = element_text(colour = "#000000"),
+                           plot.title = element_text(colour = "#000000"),
+                           axis.text.x  = element_text(colour = "#000000"),
+                           axis.text.y = element_text(colour = "#000000"),
+                           axis.line = element_line(colour = "#000000"),
+                           legend.text = element_text(colour = "#000000"),
+                           legend.title = element_text(colour = "#000000"))
+
+
+grid.arrange(arrangeGrob(plot1,plot2,plot3,plot4,plot5,plot6,nrow = 3))
+```
+
+* Karşılaştırmalı grafikler incelendiğinde Income ve CCAvg değiişkenlerinde arasında bir ilişki vardır. Bunu ileride korelasyon değerlerine bakarak inceleyeceğiz.
+
+
+
+## Kategorik Değişkenlerin Görselleştirilmesi
+
+### Education
+```{r warning=FALSE}
+# Education
+education = table(UniversalBank$Education)%>%sort(decreasing = F)%>%as.data.frame()
+c1 = ggplot(data = education,aes(x = Var1,y = Freq,fill = Freq))+
+  scale_fill_gradient(low = "orange", high = "purple")+
+  geom_bar(stat = "identity",width=.8)+
+  coord_flip()+
+  labs(title = "Education",y = "Frequency",x = "Class")+
+  theme_minimal()+theme(legend.position = "none")
+### Personal.Loan - Target
+ploan = table(UniversalBank$Personal.Loan)%>%sort(decreasing = F)%>%as.data.frame()
+c2 = ggplot(data = ploan,aes(x = Var1,y = Freq,fill = Freq))+
+  scale_fill_gradient(low = "orange", high = "purple")+
+  geom_bar(stat = "identity",width=.8)+
+  coord_flip()+
+  labs(title = "Personal Loan - Target",y = "Frequency",x = "Class")+
+  theme_minimal()+theme(legend.position = "none")
+### Securities.Account
+secacc = table(UniversalBank$Securities.Account)%>%sort(decreasing = F)%>%as.data.frame()
+c3 = ggplot(data = secacc,aes(x = Var1,y = Freq,fill = Freq))+
+  scale_fill_gradient(low = "orange", high = "purple")+
+  geom_bar(stat = "identity",width=.8)+
+  coord_flip()+
+  labs(title = "Security Account",y = "Frequency",x = "Class")+
+  theme_minimal()+theme(legend.position = "none")
+cdacc = table(UniversalBank$CD.Account)%>%sort(decreasing = F)%>%as.data.frame()
+c4 = ggplot(data = cdacc,aes(x = Var1,y = Freq,fill = Freq))+
+  scale_fill_gradient(low = "orange", high = "purple")+
+  geom_bar(stat = "identity",width=.8)+
+  coord_flip()+
+  labs(title = "CD Account",y = "Frequency",x = "Class")+
+  theme_minimal()+theme(legend.position = "none")
+#Online
+online = table(UniversalBank$Online)%>%sort(decreasing = F)%>%as.data.frame()
+c5 = ggplot(data = online,aes(x = Var1,y = Freq,fill = Freq))+
+  scale_fill_gradient(low = "orange", high = "purple")+
+  geom_bar(stat = "identity",width=.8)+
+  coord_flip()+
+  labs(title = "Online",y = "Frequency",x = "Class")+
+  theme_minimal()+theme(legend.position = "none")
+# CreditCard
+target = table(UniversalBank$CreditCard)%>%sort(decreasing = F)%>%as.data.frame()
+c6 = ggplot(data = target,aes(x = Var1,y = Freq,fill = Freq))+
+  scale_fill_gradient(low = "orange", high = "purple")+
+  geom_bar(stat = "identity",width=.8)+
+  coord_flip()+
+  labs(title = "Credit Card",y = "Frequency",x = "Class")+
+  theme_minimal()+theme(legend.position = "none")
+grid.arrange(arrangeGrob(c1,c2,c3,c4,c5,c6,nrow = 3))
+
+```
+
+
+# Korelasyonların İncelenmesi
+
+
+```{r,warning=FALSE,message=FALSE}
+lowerFn <- function(data, mapping, method = "lm", ...) {
+  p <- ggplot(data = data, mapping = mapping) +
+    geom_point(colour = "red") +
+    geom_smooth(method = method, color = "yellow", ...)
+  p
+}
+
+ggpairs(
+  UniversalBank%>%select(Age,Experience,Income,Family,CCAvg,Mortgage), lower = list(continuous = wrap(lowerFn, method = "lm")),
+  diag = list(continuous = wrap("barDiag", colour = "purple")),
+  upper = list(continuous = wrap("cor", size = 4))
+)
+
+```
+
+* Değişkenlerin birbirleri arasındaki korelasyonu incelediğimizde Age ve Experience değişkenleri arasında çok güçlü pozitif ilişki vardır.(0.99)
+* Income ve CCAvg arasında pozitif güçlü ilişki vardır.(0.65)
+
+# SVM MODEL
+
+## Train-Test Ayrımı & Dummy Değişkenlerin Oluşturulması
+
+* Verimizin %75'ini(3750) train %25(1250) ini test olacak şekilde bölelim.
+* Verimizi ölçeklendirelim.
+
+```{r,warning=FALSE,message=FALSE}
+set.seed(121510842)
+train_rows<-createDataPartition(UniversalBank$Personal.Loan,p=0.75,list = F)
+train<-UniversalBank[train_rows,]
+test<-UniversalBank[-train_rows,]
+preProc<-preProcess(train[,setdiff(names(train),"Personal.Loan")],method = c("center", "scale"))
+train<-predict(preProc,train)
+test<-predict(preProc,test)
+
+#########################
+### Dummy Degiskenler ###
+#########################
+
+dummies <- dummyVars(Personal.Loan~.,data=UniversalBank)
+
+x.train=predict(dummies, newdata = train)
+y.train=train$Personal.Loan
+x.test = predict(dummies, newdata = test)
+y.test = test$Personal.Loan
+```
+
+## Lineer SVM Modeli
+
+* İlk önce 10 cost parametreli lineer svm modelimizi kuralım ve sonuçları inceleyelim.
+```{r}
+model  =  svm(x = x.train, y = y.train, type = "C-classification", kernel = "linear", cost = 10)
+# Predict
+pred_train<-predict(model,x.train)
+pred_test<-predict(model,x.test)
+# Confusion matrix
+confusionMatrix(pred_train,y.train)
+cfm = confusionMatrix(pred_test,y.test)
+ggplotConfusionMatrix <- function(m){
+  mytitle <- paste("Accuracy", percent_format()(m$overall[1]))
+  p <-
+    ggplot(data = as.data.frame(m$table) ,
+           aes(x = Reference, y = Prediction)) +
+    geom_tile(aes(fill = log(Freq)), colour = "black") +
+    scale_fill_gradient(low = "yellow", high = "purple") +
+    geom_text(aes(x = Reference, y = Prediction, label = Freq)) +
+    theme(legend.position = "none") +
+    ggtitle(mytitle)
+  return(p)
+}
+ggplotConfusionMatrix(cfm)
+
+```
+
+* Cost = 10 parametreli lineer svm modelinin test seti accuracy değeri 0.9611 olarak bulundu. 
+* Confusion Matrix incelendiğinde ise 0(No) sonuçlarında yaptığı tahmin doğruluğy iyi bir performans vermektedir.
+
+## Radial SVM Model
+* Şimdi de 10 cost parametreli radial svm modelimizi kuralım ve sonuçları inceleyelim.
+```{r}
+#########################
+####### SVM model RBF####
+#########################
+model_RBF = svm(x.train,y.train, method = "C-classification", kernel = "radial", cost = 10,
+            gamma = 0.1)
+
+# Predict
+pred_train1<-predict(model_RBF,x.train)
+pred_test1<-predict(model_RBF,x.test)
+
+# Confusion matrix
+cfm = confusionMatrix(pred_test1,y.test)
+ggplotConfusionMatrix(cfm)
+```
+
+* Buradaki sonuç incelendiğinde test seti için elde edilen accuracy değerinde iyileşme vardır. (0.98)
+* ConfusionMatrix incelendiğinde ise 1(Yes) sonuçlarının tahmininde iyileşmeler vardır.
+
+## Çoklu Bağlantı Sorunu
+
+* Daha önce bazı değişkenlerin arasında ilişki olduğu tespit edilmişti. Bu istemediğimiz bir durum. O yüzden deneme amacıyla korelasyon olan değişkenlerden birini çıkararak yeniden model kuralım ve inceleyelim.
+
+* Age değişkeniyle ilişkisi bulunan Experience, Income değişkeniyle ilişkisi bulunan CCAvg değişkenini çıkaralım ve aynı işlemleri uygulayalım.
+
+```{r,warning=FALSE,message=FALSE}
+UniversalBank_Selected = UniversalBank%>%select(-Experience,-CCAvg)
+set.seed(121510842)
+train_rows<-createDataPartition(UniversalBank_Selected$Personal.Loan,p=0.75,list = F)
+train<-UniversalBank_Selected[train_rows,]
+test<-UniversalBank_Selected[-train_rows,]
+preProc<-preProcess(train[,setdiff(names(train),"Personal.Loan")],method = c("center", "scale"))
+train<-predict(preProc,train)
+test<-predict(preProc,test)
+
+#########################
+### Dummy Degiskenler ###
+#########################
+
+dummies <- dummyVars(Personal.Loan~.,data=UniversalBank_Selected)
+
+x.train=predict(dummies, newdata = train)
+y.train=train$Personal.Loan
+x.test = predict(dummies, newdata = test)
+y.test = test$Personal.Loan
+
+model_RBF = svm(x.train,y.train, method = "C-classification", kernel = "radial", cost = 10,
+            gamma = 0.1)
+summary(model_RBF)
+
+# Predict
+pred_train1<-predict(model_RBF,x.train)
+pred_test1<-predict(model_RBF,x.test)
+
+# Confusion matrix
+cfm = confusionMatrix(pred_test1,y.test)
+ggplotConfusionMatrix(cfm)
+```
+
+* Accuracy değerinde ve ConfusionMatrixte bir iyileşme görülmedi.
+
+* Şimdi optimal modele (Radial SVM) auc ve roc analizi yapalım.
+
+## AUC-ROC
+```{r}
+pred = prediction(as.numeric(unname(pred_test1)),as.numeric(y.test))
+auc = performance(pred,measure = "auc")
+print(paste0("AUC Değeri : ",auc@y.values))
+```
+
+* AUC değerimi 0.80 cutpoint değerinden büyük olduğundan iki kategoriyi ayırt etmede başarılıdır.
+
+
+```{r}
+roc = performance(pred,"tpr","fpr")
+plot(roc,colorize = T)
+```
+
+* ROC eğrisinin altında kalan alan yeterince geniştir ve Tpr oranı yani kampanya sonucu kredi alacak kişileri tespit etme oranımız yüksektir.
+
