@@ -1,0 +1,1037 @@
+---
+title:  " <center>\n![](https://www.spicedecorating.com/v/vspfiles/assets/images/01826.jpg){width=2in,length=3in}  \n</center>\n\n Veri Madenciliği Vize Ödevi\n
+  \ "
+output:
+  html_document:
+    theme: simplex
+    highlight: textmate
+    fontsize: 8pt
+    toc: yes
+    number_sections: no
+    code_download: no
+    toc_float:
+      collapsed: yes
+  word_document:
+    toc: yes
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+---
+
+
+
+ **Eda EMANET 121518015**
+ **Tolga KURT 121520824** 
+  **Ramazan YALÇIN 121519821**
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r include=FALSE}
+#ryet <- "file:///C:/Users/Dell/Dropbox/My PC (DESKTOP-EB8G4PC)/Desktop/veri_madenciliği.JPG"
+```
+
+
+
+**Kaynak:** https://data.world/marshalldatasolution/breast-cancer
+
+**Açıklama:** Bu veri setinde meme kanseri varlığını test etmek için toplanmış veriler yer almaktadır. 116 katılımcının her biri için, aşağıdakiler dahil olmak üzere çeşitli klinik özellikler gözlemlenmiş veya ölçülmüştür.
+
+**Değişken Açıklamaları:**
+
++ *Age:* Yaş.
++ *BMI (Body Mass Index):* Vücut kitle endeksi değeri.
++ *Glucose:* Basit bir monosakkarit olan glikoz yaşam için en önemli karbonhidratlardan biridir.
++ *Insulin:* İnsülin, pankreastaki beta hücrelerinde salgılanan bir hormondur.
++ *HOMA:* Açlık glikozu ve insülinin plazma seviyelerine dayanan homeostaz modeli değerlendirmesi.
++ *Leptin:* Ağırlıklı olarak yağ hücreleri tarafından üretilen ve açlığı engelleyerek enerji dengesini düzenlemeye yardımcı olan bir hormondur.
++ *Adiponectin:* Glikoz seviyelerinin yanı sıra yağ asidi yıkımını düzenleyen bir protein hormonudur.
++ *Resistin:* Kemirgenlerde obezite ve insülin direncine bağlı adiposit salgılanan bir hormondur. 
++ *MCP-1:* Monosit kemoatraktan protein-1, monositler ve makrofajlar için iltihaplanma bölgelerine yönelik güçlü bir kemoatraktandır.
++ *Classification:* 1 sağlıklı, 2 hasta anlamına gelen etiketleri bulunduran değişkendir.
+
+Ödevimizde kullanacağımız gerekli kütüphane yüklemeleri aşağıda yapılmıştır.
+
+```{r warning=FALSE, message=FALSE}
+library(naniar)
+library(UpSetR)
+library(tidyverse)
+library(summarytools)
+library(plyr)
+library(dplyr)
+library(DataExplorer)
+library(purrr)
+library(readr)
+library(readxl)
+library(rio)
+library(lubridate)  #tarihlerle ilgili düzenleme
+library(arsenal)  #düzgün özet tablosu oluşturmak 
+library(gapminder)
+library(DiagrammeR)
+library(kableExtra)
+library(multcompView)  #post-hoc analizler
+library(rcompanion) #post-hoc analizler
+library(chisq.posthoc.test) 
+library(anchors)
+library(stringr)
+library(stringi)
+library(anchors)
+library(tm)
+library(data.table)
+library(ggpubr) #normallik için
+library(Hmisc)
+library(finalfit)
+library(VIM)
+library(SmartEDA)
+#library(dlookr)
+library(performance)
+library(see)
+library(ISLR)
+library(funModeling)
+library(caret)
+library(pROC)
+library(class)#knn icin
+library(e1071)#knn icin
+library(kernlab) #svm icin
+library(ROCR) #roc icin
+library(neuralnet)
+library(GGally)
+library(nnet)
+library(rpart)
+library(cli)
+library(tree)
+library(rpart.plot)
+library(randomForest)
+library(gbm)
+library(xgboost)
+library(DiagrammeR)
+library(mlbench)
+library(rpart)
+library(ggcharts)
+library(quantable)
+library(ggplot2)
+library(plotly)
+library(timetk)
+library(Rcpp)
+library(corrplot)
+library(ggcorrplot)
+library(httr)
+library(RCurl)
+library(kknn)
+library(plyr)
+library(rpart.plot)
+library(kableExtra)
+library(ggCyberPunk)
+library(gridExtra)
+library(readxl)
+```
+
+Veri setimiz xlsx formatındadır. read_excel komutu ile verimizi çekiyoruz.
+
+```{r include=FALSE}
+url = "https://query.data.world/s/rhnclqjp5ct7epphyj55qc5mguywcj"
+GET(url = url, write_disk(tf <- tempfile(fileext= ".xlsx")))
+df <- read_excel(tf)
+```
+
+Classification değişkenimizin faktör olarak Tanimlamasını yapıyoruz.
+```{r include=FALSE}
+df$Classification <- as.factor(df$Classification )
+#levels(df$Classification)
+summary(df)
+df[is.na(df)==TRUE]
+head(df,5)
+```
+
+# Özet İstatistik
+
+**Verimizin özet istatistiklerinin incelenmesi:**
+
+
+
+```{r}
+df$Tani <- df$Classification
+levels(df$Tani) <- c("Saglıklı", "Hasta")
+my_controls <- tableby.control(
+  test = T,
+  total = T,
+  numeric.test = "kwt", cat.test = "chisq",
+  numeric.stats = c("meansd", "medianq1q3", "range", "Nmiss2"),
+  cat.stats = c("countpct", "Nmiss2"),
+  stats.labels = list(
+    meansd = "Mean (SD)",
+    medianq1q3 = "Median (Q1, Q3)",
+    range = "Min - Max",
+    Nmiss2 = "Missing"
+  )
+)
+
+tab1 <- tableby(df$Tani ~. , data=df[,1:9], control = my_controls)
+summary(tab1, digits= 1)
+
+```
+
+
+------------------------------------------------------------------------------------------------------
+
+- Burada değişkenlerin "Classification" grupları üzerindeki özet istatistikleri incelenmiştir.
+
+- Classification değişkenine göre 116 katılımcıdan 52'si sağlıklı, 64'ü hastadır.
+
+- Age değişkenine baktığımızda sağlıklı katılımcılarının yaş ortalamasının 58.1, hasta katılımcıların ise 56.7 olduğunu görmekteyiz.
+
+- Tüm katılımcılarda ise yaş ortalaması 57.3'dür. Ayrıca sağlıklı katılımcılarda minimum yaşın 24, maksimumun da 89 olduğunu görüyoruz. Hasta katılımcılarda ise minimum yaş 34, maksimumun da 86'dır. Buradan hasta katılımcıların minimum yaşının 10 yaş daha fazla olduğu yorumunu yapabiliriz.
+
+- Missing değerlerine baktığımızda değişkenimizde eksik değer yoktur. İlaveten diğer tüm değişkenler için de aynı durum söz konusu olup eksik değer bulunmamaktadır. p value değeri ise 0.477'dir. p değeri 0.05’in üzerinde olduğundan Age değişkeni için sağlıklı ve hasta gruplar arasında anlamlı bir farklılık yoktur.
+
+- Diğer değişkenler için de p değerleri şu şekildedir: BMI-0.201, Glucose-0.001, Insulin-0.026, HOMA-0.003, Leptin-0.947, Adiponectin-0.764, Resistin-0.002, MCP.1-0.502
+Glucose, Insulin, HOMA ve Resistin değişkenleri için p değerleri 0.05’in altında olduğundan bu değişkenler için sağlıklı ve hasta gruplar arasında anlamlı bir farklılık vardır yorumunu yapabiliriz.
+
+- Fakat kalan diğer değişkenler için sağlıklı ve hasta gruplar arasında anlamlı bir farklılık yoktur.
+
+- Görüldüğü üzere hedef değişken ( Classification) dengesizdir. Tabakalı örnekleme kullanılabilir.
+
+------------------------------------------------------------------------------------------------------
+
+
+# Aykırı Değer İnceleme
+
+
+
+#### Boxplot
+
+#### {.tabset .tubset-fade .tabset-pills}
+
+##### Tani-BMI
+```{r}
+ggplot(df, aes(Tani , BMI, fill=Tani)) +
+ geom_boxplot()+
+ scale_y_continuous("BMI")+
+ labs(title = "BMI Box Plot", x = "Tani")
+```
+
+
+##### Tani-Glucose
+
+```{r}
+ggplot(df, aes(Tani, Glucose, fill=Tani)) +
+ geom_boxplot()+
+ scale_y_continuous("Glucose")+
+ labs(title = "Glucose Box Plot", x = "Tani")
+```
+
+
+##### Tani-Insulin
+
+```{r}
+ggplot(df, aes(Tani, Insulin, fill=Tani)) +
+ geom_boxplot()+
+ scale_y_continuous("Insilun")+
+ labs(title = "Insulin Box Plot", x = "Tani")
+```
+
+
+##### Tani-HOMA
+
+```{r}
+ggplot(df, aes(Tani, HOMA, fill=Tani)) +
+ geom_boxplot()+
+ scale_y_continuous("HOMA")+
+ labs(title = "HOMABox Plot", x = "Tani")
+```
+
+
+##### Tani-Leptin
+
+```{r}
+ggplot(df, aes(Tani, Leptin, fill=Tani)) +
+ geom_boxplot()+
+ scale_y_continuous("Leptin")+
+ labs(title = "Leptin Box Plot", x = "Tani")
+```
+
+
+##### Tani-Adiponenctin
+
+```{r}
+ggplot(df, aes(Tani,Adiponectin, fill=Tani)) +
+ geom_boxplot()+
+ scale_y_continuous("Adiponectin")+
+ labs(title = "Adiponectin Box Plot", x = "Tani")
+```
+
+
+##### Tani-Resistin
+
+```{r}
+ggplot(df, aes(Tani,Resistin, fill=Tani)) +
+ geom_boxplot()+
+ scale_y_continuous("Resistin")+
+ labs(title = "Reisistin Box Plot", x = "Tani")
+```
+
+
+##### Tani- MCP.1
+
+```{r}
+ggplot(df, aes(Tani,MCP.1, fill=Tani)) +
+ geom_boxplot()+
+ scale_y_continuous("MCP.1")+
+ labs(title = "MCP.1 Box Plot", x = "Tani")
+```
+
+
+
+
+
+#### {-}
+
+
+
+---
+
+------------------------------------------------------------------------------------
+- Elde ettiğimiz grafiklere baktığımızda sadece BMI değişkeni için aykırı değer bulunmamaktadır. Diğer değişkenlerde ise birçok aykırı değer bulunmaktadır.
+
+- Bu durum modeli olumsuz etkileyebilmektedir. Çünkü K-En Yakın Komşu (K-Nearest Neighbors(KNN)) gibi fonksiyonlarda öklid uzaklığı kullanıldığından modelin iyi tahmin yapmasını engelleyebilmektedir. Bu durumu önlemek için de scale fonksiyonu ile değerlerleri belirli bir aralığa çekebiliriz.
+------------------------------------------------------------------------------------
+
+# Değişkenlerin Korelasyonları
+
+```{r}
+ert <- df[, c(1:9)]
+corrdata <- cor(ert)
+corrplot(corrdata, method = "circle")
+```
+
+- Değişkenler arası korelasyon grafiğimiz yukarıdaki gibidir. Korelasyon katsayısı iki değişken arasındaki doğrusal ilişkinin ölçüsür. Korelasyon katsayısının 0’a yaklaşması değişkenler arasında zayıf ilişkinin varlığını gösterir.Korelasyon katsayısının 0 ile 1 arasında bulunması pozitif yönde korelasyon 0 ile -1 arasında bulunması da negatif yönde korelasyonun varlığı anlamına gelmektedir.
+
+- Grafiğimize baktığımızda BMI-Leptin, Glucose-HOMA ve Insulin-HOMA değişkenleri arasında pozitif yönde oldukça güçlü bir ilişki bulunmaktadır. Age-Adiponectim, BMI-Adiponectim, Glucose-Adiponectim, Resistin-Adiponectim ve MCP.1-Adiponectim değişkenleri arasında ise negatif yönde çok zayıf ilişki olduğu gözlemlenmektedir.
+
+
+# Değişken Seçimi (Future selection) :
+
+- Üstte bahsettiğimiz gibi  Insulin ve HOMA değişkenleri arasındaki güçlü ilişki (0.93) sebebiyle, her iki değişkenin aynı bilgiyi verdiğini söyleyebiliriz. Bu durumda yaşanabilecek bilgi kaybını min ve model performansını maksimim yapacak değişkeni tutup diğerini çıkarmaya karar verdik .
+Değişkenlerden birinin olmadığı durumda model performanslarını test ettik. En Optimum sonucu Insulin değişkenin olmadığı, HOMA değişkenin tutulduğu  modellerde bulduk. Ayrıca bu sonuç beklenildiği gibi her iki değişkenin de olduğu modellerden daha iyi performans gösterdi.
+- Daha açıklayıcı olması tüm değişkenlerle  kurulan model  için  değişkenlerin önem düzeyini veren görseli inceleyebilirsiniz.  Görüldüğü üzere ufak bir fark ile HOMA değişkeni daha önemlidir.
+
+
+
+
+
+
+
+# Test Train Ayrımı
+Veride hedef değişken dengeli değildir, bu yüzden veriyi *caret* kütüphanesinde bulunan *createDataPartition* fonksiyonunu kullanarak tabakalı bölme yöntemiyle ayıracağız.
+```{r echo=TRUE, warning=FALSE}
+set.seed(123)
+
+df <- df[, -c(11,4)] # 11. değişken grafik için oluşturulan değişkendir. Orijinal veride bulunmamaktadır.
+train_indeks <- createDataPartition(df$Classification, p = 0.75, list = FALSE, times = 1)
+
+train <- df[train_indeks,]
+test <- df[-train_indeks,]
+
+
+train <- as.data.frame(train)
+test <- as.data.frame(test)
+
+
+train_x = train[, -c(9)]
+# scale edilmesi için:
+scale_train_x = scale(train_x)
+
+train_y = train[, 9]
+
+test_x = test[, -c(9)]
+
+#scale edilmesi için
+scale_test_x = scale(test_x)
+
+test_y = test[, 9]
+
+
+# Ek olarak:
+train_y2 <- train$Classification
+test_y2 <- test$Classification
+levels(test_y2) <- c("Saglıklı", "Hasta")
+levels(train_y2) <- c("Saglıklı", "Hasta")
+```
+
+- Verilerimizi "train (eğitim)" ve "test" olarak iki bölüme ayırıyoruz. Veri setinde toplam 116 kayıt var bunun %75'ine eşit olan yani 87’sini train, 29’unu test olarak ayırdık. Daha sonra bağımsız değişkenler aynı birimde olmadığı için feature scaling uyguluyoruz.
+
+
+
+# Karar Matrisi görselleştirme :
+
+```{r echo=TRUE}
+draw_confusion_matrix <- function(cm) {
+
+  layout(matrix(c(1,1,2)))
+  par(mar=c(2,2,2,2))
+  plot(c(100, 345), c(300, 450), type = "n", xlab="", ylab="", xaxt='n', yaxt='n')
+  title('CONFUSION MATRIX', cex.main=2)
+  
+
+  # create the matrix 
+  rect(150, 430, 240, 370, col='#3F97D0')
+  text(195, 435, 'Sağlıklı', cex=1.2)
+  rect(250, 430, 340, 370, col='#F7AD50')
+  text(295, 435, 'Hasta', cex=1.2)
+  text(125, 370, 'Predicted', cex=1.3, srt=90, font=2)
+  text(245, 450, 'Actual', cex=1.3, font=2)
+  rect(150, 305, 240, 365, col='#F7AD50')
+  rect(250, 305, 340, 365, col='#3F97D0')
+  text(140, 400, 'Sağlıklı', cex=1.2, srt=90)
+  text(140, 335, 'Hasta', cex=1.2, srt=90)
+
+  # add in the cm results 
+  res <- as.numeric(cm$table)
+  text(195, 400, res[1], cex=1.6, font=2, col='white')
+  text(195, 335, res[2], cex=1.6, font=2, col='white')
+  text(295, 400, res[3], cex=1.6, font=2, col='white')
+  text(295, 335, res[4], cex=1.6, font=2, col='white')
+  
+  # add in the specifics 
+  plot(c(100, 0), c(100, 0), type = "n", xlab="", ylab="", main = "DETAILS", xaxt='n', yaxt='n')
+  text(10, 85, names(cm$byClass[1]), cex=1.2, font=2)
+  text(10, 70, round(as.numeric(cm$byClass[1]), 3), cex=1.2)
+  text(30, 85, names(cm$byClass[2]), cex=1.2, font=2)
+  text(30, 70, round(as.numeric(cm$byClass[2]), 3), cex=1.2)
+  text(50, 85, names(cm$byClass[5]), cex=1.2, font=2)
+  text(50, 70, round(as.numeric(cm$byClass[5]), 3), cex=1.2)
+  text(70, 85, names(cm$byClass[6]), cex=1.2, font=2)
+  text(70, 70, round(as.numeric(cm$byClass[6]), 3), cex=1.2)
+  text(90, 85, names(cm$byClass[7]), cex=1.2, font=2)
+  text(90, 70, round(as.numeric(cm$byClass[7]), 3), cex=1.2)
+}
+```
+
+- Confusion matrix (hata matrisi) görselleştirmemiz için "draw_confusion_matrix" adında fonksiyon Tanimlamamızı yaptık.
+
+# KNN Modeli
+```{r echo=TRUE, warning=FALSE}
+knn_fit <- knn(scale_train_x,  scale_test_x, cl =train_y2 , k = 2)
+
+summary(knn_fit)
+
+a <- confusionMatrix(table(knn_fit , test_y2))
+
+draw_confusion_matrix(a)
+
+```
+
+
+
+
+
+
+- Şimdi class kütüphanesi knn komutu ile scaling uyguladığımız scale_train_x değişkenini kullanarak knn_fit nesnesi modelimizi oluşturuyoruz. k=2 kullanılmıştır. Oluşturduğumuz modelin doğruluğunu kontrol etme yöntemlerinden birisi de hata matrisi oluşturmaktır. draw_confusion_matrix fonksiyonu ile hata matrisimizi yapıyoruz. Grafiğimize göre gerçekte sağlıklı olarak katılım sağlayıp tahminde de sağlıklı olan katılımcı sayısının 9, gerçekte hasta olarak katılım sağlayıp tahminde de hasta olan katılımcı sayısının da 13 olduğu sonucuna ulaşırız. Gerçekte sağlıklı olup hasta olarak tahmin edilen kişi sayısının 4, gerçekte hasta olup sağlıklı olarak tahmin edilen kişi sayısının ise 3 olduğunu söyleyebiliriz.
+
+
+
+
+
+
+
+- Detaylar tablosuna baktığımızda ise Sensitivity değeri 0.692'dir. Bu değer, tüm sağlıklı sınıflardan ne kadar doğru tahmin ettiğimizdir. Modelimizin doğruları bilme konusundaki etkinliği de denilebilir.
+Specificty değerimiz ise 0.812'dir. Bu değer hastaları tahmin etme etkinliğidir. Hastalara ne derece hasta diyebilmişiz yani.
+Precision değerimiz de 0.75'dir. Bu değer de tüm sınıflardan (sağlıklı ve hasta), ne kadar doğru tahmin ettiğimizdir.
+Son olarak Recall değerimiz ise 0.692'dir. Bu değer Sensitivity değeri ile aynıdır.
+F1 skorumuz ise 0.72'dir. Skorun hesaplanışı şu şekildedir: 2 x Precision x Recall / (Precision + Recall)
+
+- Elde edilen sonuçlara göre orta iyilikte bir tahmin modeli oluşturulduğu sonucuna varabiliriz.
+
+```{r echo=FALSE, warning=FALSE}
+a[3]$overall[1] %>%
+  kbl() %>%
+ kable_material_dark()
+```
+
+- Accuracy, doğruluk olarak da bilinmektedir. Modelimizi değerlendirmek için yapılan uygulamadır. Doğru yapılan sınıflandırmanın toplama bölünmesidir. Yani sağlıklı olana sağlıklı hasta olana hasta dediklerimizin oranıdır. Ayrıca esas köşegenin toplama oranı da diyebiliriz. Elde edilen sonuç 0.7586207'dir. Sonuca göre orta bir model oluşturulduğu sonucuna varabiliriz.
+
+
+## KNN için MODEL Tuning
+
+```{r echo=TRUE, warning=FALSE}
+
+set.seed(123)
+ctrl <- trainControl(method = "cv", 
+                     number = 10, 
+                     summaryFunction = twoClassSummary,
+                     classProbs = TRUE,
+                     savePredictions = TRUE)
+
+knn_grid <- data.frame(k = c(1:25,30,40,50,60,70,80,90,100))
+scale_train_x <- as.data.frame(scale_train_x)
+knn_tune <- train(scale_train_x, train_y2,
+                  method = "knn",
+                  metric = "ROC",
+                  preProc = c("center", "scale"),
+                  trControl = ctrl,
+                  tuneGrid = knn_grid)
+
+plot(knn_tune)
+ 
+knn_tune$bestTune
+
+b <-confusionMatrix(predict(knn_tune, scale_test_x), test_y2, positive = "Saglıklı")
+```
+------------------------------------------------------------------------------------
+- Modeli geliştirmek, en uygun model belirleyerek parametre ayarlamalarını yapmak için "Model Tuning" uygulaması yapıyoruz. 
+
+- X ekseni değerleri knn'deki komşu sayılarıdır. y ekseninde ise ROC (Cross-Validation) değerleri bulunmaktadır.
+En düşük k=50'ye karşılık ROC değerimiz 0.4560417, Sens değerimiz 0.0750000 ve Spec değerimiz ise 0.880'dir.
+- En yüksek k=4'e karşılık ROC değerimiz 0.7702083, Sens değerimiz 0.6916667 ve Spec değerimiz ise 0.675'dir.
+
+- Optimal modeli belirlemek için ROC (Cross-Validation) yöntemi kullanılmıştır. Modle için kullanılan son değer k=4'tür.
+------------------------------------------------------------------------------------
+```{r echo=TRUE, warning=FALSE}
+draw_confusion_matrix(b)
+```
+
+- Yukarıda knn_tune adına kurduğumuz değişkeni ve verimizde test seti olarak ayırıp daha sonra scaling uyguladığımız scale_test_x değişkenini de kullanarak knn_fit nesnesi modelimizi oluşturuyoruz. Hata matrisi oluşturulmuştur. Grafiğimize göre gerçekte sağlıklı olarak katılım sağlayıp tahminde de sağlıklı olan katılımcı sayısının 10, gerçekte hasta olarak katılım sağlayıp tahminde de hasta olan katılımcı sayısının da 16 olduğu sonucuna ulaşırız. Gerçekte sağlıklı olup hasta olarak tahmin edilen kişi sayısının 3, gerçekte hasta olup sağlıklı olarak tahmin edilen kişi sayısının ise 0 olduğunu söyleyebiliriz.
+
+- Detaylar tablosuna baktığımızda ise Sensitivity değeri 0.769'dur. Bu değer, tüm sağlıklı sınıflardan ne kadar doğru tahmin ettiğimizdir. Modelimizin doğruları bilme konusundaki etkinliği de denilebilir.
+Specificty değerimiz ise 1'dir. Bu değer hastaları tahmin etme etkinliğidir. Hastalara ne derece hasta diyebilmişiz yani. Yani tüm hastalar doğru tahmin edilmiştir.
+Precision değerimiz de 1'dir. Bu değer de tüm sınıflardan (sağlıklı ve hasta), ne kadar doğru tahmin ettiğimizdir.
+- Son olarak Recall değerimiz ise 0.769'dur.
+- F1 skorumuz ise 0.87'dir.
+
+- Elde edilen sonuçlara göre iyi bir tahmin modeli oluşturulduğu sonucuna varabiliriz.
+
+
+```{r echo=FALSE}
+round(b[3]$overall[1],3) %>%
+  kbl() %>%
+  kable_material_dark()
+```
+
+- Accuracy terimi ile ilgili gerekli bilgi yukarıda verilmişti. Elde edilen sonuç 0.8977'dir. Sonuca göre oldukça iyi bir model oluşturulduğu sonucuna varabiliriz.
+
+
+
+# Random Forest
+
+```{r echo=TRUE, warning=FALSE}
+rf_fit <- randomForest(train$Classification~., data =scale_train_x, importance = TRUE)
+
+importance(rf_fit)
+
+varImpPlot(rf_fit)
+```
+
+Bu grafik, model için değişkenlerin önemliliğini göstermektedir. Bu model için en önemsiz değişkenler MCP.1 ve Adiponectin'dir. Ayrıca elde edilen modeldeki değişkenlerin önem düzeyleri ortalama gini katsayısına göre de izlenebilir.
+
+
+```{r echo=TRUE, warning=FALSE}
+pred_forest = predict(rf_fit, scale_test_x)
+
+
+c <-confusionMatrix(predict(rf_fit, scale_test_x), test_y) 
+
+draw_confusion_matrix(c)
+```
+
+- Random forest uygulamasını yaptığımız rf_fit adlı değişkenimizi kullanarak oluşturduğumuz confusion matrix yukarıdadır. 
+Böylelikle hata matrisi oluşturulmuştur. Grafiğimize göre gerçekte sağlıklı olarak katılım sağlayıp tahminde de sağlıklı olan katılımcı sayısının 10, gerçekte hasta olarak katılım sağlayıp tahminde de hasta olan katılımcı sayısının da 13 olduğu sonucuna ulaşırız. Gerçekte sağlıklı olup hasta olarak tahmin edilen kişi sayısının 3, gerçekte hasta olup sağlıklı olarak tahmin edilen kişi sayısının ise 3 olduğunu söyleyebiliriz.
+
+- Detaylar tablosuna baktığımızda ise Sensitivity değeri 0.769'dur. Bu değer, tüm sağlıklı sınıflardan ne kadar doğru tahmin ettiğimizdir. Modelimizin doğruları bilme konusundaki etkinliği de denilebilir.
+Specificty değerimiz ise 0.812'dir. Bu değer hastaları tahmin etme etkinliğidir. Hastalara ne derece hasta diyebilmişiz yani.
+Precision değerimiz de 0.769'dur. Bu değer de tüm sınıflardan (sağlıklı ve hasta), ne kadar doğru tahmin ettiğimizdir.
+- Son olarak Recall değerimiz ise 0.769'dur.
+- F1 skorumuz ise 0.769'dur.
+
+- Elde edilen sonuçlara göre iyi bir tahmin modeli oluşturulduğu sonucuna varabiliriz.
+
+
+```{r echo=FALSE, warning=FALSE}
+
+c[3]$overall[1] %>%
+ kbl() %>%
+  kable_material_dark()
+```
+- Accuracy değerimiz 0.7931034'dür. Sonuca göre oldukça iyi bir model oluşturulduğu sonucuna varabiliriz.
+
+- Şuana kadar uyguladığımız uygulamalardan en iyisin Model Tuning uygulaması yani knn_tune değişkeni, daha sonra Random Forest uygulaması yani rf_fit adlı değişken, en düşük skor elde ettiğimiz ise knn uygulaması yani knn_fit adlı değişken olmuştur.
+
+
+#  Random Forest Tuning
+
+```{r echo=TRUE, warning=FALSE}
+
+set.seed(123)
+
+
+#GRID SEARCH
+control <- trainControl(method='cv', 
+                        number=10, 
+                        search='grid')
+ 
+tunegrid <- expand.grid(mtry = (40:60)) 
+
+
+
+
+rf_gridsearch <- train(scale_train_x, train_y2,
+                  method = "rf",
+                  metric = "Accuracy",
+                  tuneGrid = tunegrid)
+
+
+plot(rf_gridsearch)
+
+d <- confusionMatrix(predict(rf_gridsearch, scale_test_x), test_y2)
+
+ 
+
+```
+-  mtry :  mtyr parametresi  her bir alt bölünmede tesadüfi bir şekilde örneklenen değişkenlerin sayısını göstermektedir. Örnek için 40:60 değerleri, tunegrid olarak ayarlanarak elde edilen değerler arasından optimum sonucu verecek olan değeri seçmek için tuning işlemi yapılmıştır.
+
+
+```{r echo=TRUE, warning=FALSE}
+d <- confusionMatrix(predict(rf_gridsearch, scale_test_x), test_y2)
+draw_confusion_matrix(d)
+
+```
+- Random Forest Tuning uygulamasını yaptığımız rf_gridsearch adlı değişkenimizi kullanarak oluşturduğumuz hata matrisi yukarıdadır. Grafiğimize göre gerçekte sağlıklı olarak katılım sağlayıp tahminde de sağlıklı olan katılımcı sayısının 9, gerçekte hasta olarak katılım sağlayıp tahminde de hasta olan katılımcı sayısının da 13 olduğu sonucuna ulaşırız. Gerçekte sağlıklı olup hasta olarak tahmin edilen kişi sayısının 4, gerçekte hasta olup sağlıklı olarak tahmin edilen kişi sayısının ise 3 olduğunu söyleyebiliriz.
+
+- Detaylar tablosuna baktığımızda ise Sensitivity değeri 0.692'dir. Bu değer, tüm sağlıklı sınıflardan ne kadar doğru tahmin ettiğimizdir. Modelimizin doğruları bilme konusundaki etkinliği de denilebilir.
+Specificty değerimiz ise 0.812'dir. Bu değer hastaları tahmin etme etkinliğidir. Hastalara ne derece hasta diyebildiğimizi göstermektedir.
+- Precision değerimiz de 0.75'dur. Bu değer de tüm sınıflardan (sağlıklı ve hasta), ne kadar doğru tahmin ettiğimizdir.
+- Son olarak Recall değerimiz ise 0.692'dir.
+- F1 skorumuz ise 0.72'dir.
+
+- Elde edilen sonuçlara göre iyi bir tahmin modeli oluşturulduğu sonucuna varabiliriz.
+- Aynı zamanda bu sonuçlar knn modeli kullanarak aldığımız sonuçlar ile aynıdır.
+
+
+```{r echo=FALSE}
+round(d[3]$overall[1],3) %>%
+  kbl() %>%
+  kable_material_dark()
+```
+
+Elde ettiğimiz Accuracy değeri knn modeli için elde edilen ile aynıdır. Çıkan sonuç 0.7586207'dir. Sonuca göre yukarıda da yaptığımız gibi orta iyilikte bir model oluşturulduğu yorumunu yapabiliriz.
+
+
+
+# Yapay Sinir Ağları:
+
+- Yapay Sinir Ağları, beynin bir işlevini yerine getirme yöntemini modellemek için tasarlanan bir sistem olarak Tanimlanabilmektedir. Veri setimiz için yapay sinir ağları uygulaması aşağıdaki gibidir.
+- nnet() fonksiyonu kullanabilmek için Classification değişkenimizin levelerini tekrar ayarlamamış gerekmiş bu da test-train ayrımını yeniden düzenlememize sebep olmuştur.
+
+```{r}
+set.seed(123)
+# Classification levelleri tekrar düzenlendiği için  test-train ayrımı daha tekrar yapılmıştır.
+df$Classification <- df$Classification
+levels(df$Classification) <- c("Saglıklı", "Hasta")
+
+train_indeks <- createDataPartition(df$Classification, p = 0.75, list = FALSE, times = 1)
+
+train <- df[train_indeks,]
+test <- df[-train_indeks,]
+
+
+train <- as.data.frame(train)
+test <- as.data.frame(test)
+
+
+train_x = train[, -c(9)]
+# scale edilmesi için:
+scale_train_x = scale(train_x)
+
+train_y = train[, 9]
+
+test_x = test[, -c(9)]
+
+#scale edilmesi için
+scale_test_x = scale(test_x)
+
+test_y = test[, 9]
+
+nnet_fit <- nnet(Classification~., df, size = 3, decay = 0.1)
+```
+
+Oluşturulan nnet_fit modeline göre 31 ağırlıklı bir 8-3-1 ağı oluşturulmuştur. Bu yapay hücre modelimiz için girdilerimiz: Age, BMI, Glucose, HOMA, Leptin, Adiponectin, Resistin ve MCP.1'dir. Çıktımız ise Classification değişkenimizdir. Ağırlık düşüşü için parametre ise 0.1 olarak alınmıştır.
+
+```{r}
+head(predict(nnet_fit, train_x))
+head(predict(nnet_fit, train_x, type = "class"))
+
+pred <- predict(nnet_fit,test_x, type = "class")
+as_tibble(pred)
+
+```
+
+
+
+
+
+```{r}
+yp <-confusionMatrix(factor(pred), test_y, positive = "Saglıklı")
+draw_confusion_matrix(yp)
+```
+- Detaylar tablosuna baktığımızda ise Sensitivity değeri 0.846'dir. Bu değer, tüm sağlıklı sınıflardan ne kadar doğru tahmin ettiğimizdir. Modelimizin doğruları bilme konusundaki etkinliği de denilebilir.
+Specificty değerimiz ise 0.875'dir.
+- Precision değerimiz de 0.846'dur. Bu değer de tüm sınıflardan (sağlıklı ve hasta), ne kadar doğru tahmin ettiğimizdir.
+- Son olarak Recall değerimiz ise 0.846'dir.
+- F1 skorumuz ise 0.846'dir.
+
+
+```{r echo=FALSE}
+round(yp[3]$overall[1],3) %>%
+  kbl() %>%
+  kable_material_dark()
+```
+
+
+
+Accuracy değerimiz 0.8621'dir. Sonuca göre oldukça iyi bir model oluşturulduğu sonucuna varabiliriz.
+
+
+## Yapay Sinir Ağları Tuning:
+```{r}
+ctrl <- trainControl(method="cv",
+                     summaryFunction = twoClassSummary,
+                     classProbs = TRUE)
+
+
+nnetGrid <- expand.grid(size = 30:40,
+                        decay = c(0, 0.1,0.5, 1, 2))
+
+maxSize <- max(nnetGrid$size)
+
+numWts <- 1*(maxSize * (length(train_x) + 1) + maxSize + 1)
+
+
+nnet_tune <- train(
+  train_x, train_y,
+  method = "nnet",
+  metric = "ROC",
+  tuneGrid = nnetGrid,
+  trace = FALSE, 
+  maxit = 2000,
+  MaxNWts = numWts,
+  trControl = ctrl
+  
+)
+plot(nnet_tune)
+
+pred <- predict(nnet_tune, test_x)
+
+
+```
+
+Modeli gelişimi için Model Tuning uygulaması yapılmıştır. 30 ile 40 boyutları arasında ağırlık düşüşü için paremetre değerleri de şunlardır: 0, 0.1,0.5, 1, 2. Bu sağlanan tüm kombinasyonlar "nnetGrid" adlı değişkene atanmıştır. train fonksiyonunda nnet metodu kullanılmış, optimal metriği belirlemede ise ROC (Cross-Validation) yöntemi kullanılmıştır. Performans ölçüsünün sonuçları çıktı alınan grafikte yer almaktadır. En düşük ROC değerlerinin elde edildiği ağırlık düşüş değeri 0'dır. Diğer değerlere göre başarısız bir ağırlık düşüş değeri olduğu söylenebilir. Diğer değerlerin ise birbirlerine yakın, iyi sonuçlar verdiği gözlemlenmektedir.
+
+
+
+
+
+
+
+
+```{r}
+yt <-confusionMatrix(factor(pred), test_y, positive = "Saglıklı")
+draw_confusion_matrix(yt)
+```
+
+- Detaylar tablosuna baktığımızda ise Sensitivity değeri 0.692'dir. 
+- Specificty değerimiz ise 0.938'dir.
+- Precision değerimiz de 0.9'dur.
+- Son olarak Recall değerimiz ise 0.692'dir.
+- F1 skorumuz ise 0.783'dir.
+
+
+
+
+
+
+```{r echo=FALSE}
+round(yt[3]$overall[1],3) %>%
+  kbl() %>%
+  kable_material_dark()
+```
+
+- Accuracy değeri 0.82'dir.
+
+
+# Aykırı Gözlemler Çıkarıldıktan Sonraki Modeller
+
+Veri setimizdeki değişkenler için saçılım grafiklerimiz aşağıdaki gibidir. Renklendirme Classification değişkenine göre yapılmış olup pembe renk sağlıklı, mavi renk ise hasta katılımcıları temsil etmektedir.
+
+```{r eval=FALSE}
+url = "https://query.data.world/s/rhnclqjp5ct7epphyj55qc5mguywcj"
+GET(url = url, write_disk(tf <- tempfile(fileext= ".xlsx")))
+breast_data <- read_excel(tf)
+a = ggplot(breast_data,aes(x = seq(1,116),y = Age,colour = Classification))+geom_point()+xlab("")+ylab("Age")+theme_cyberpunk()
+b = ggplot(breast_data,aes(x = seq(1,116),y = BMI,colour = Classification))+geom_point()+xlab("")+ylab("BMI")+theme_cyberpunk()
+c = ggplot(breast_data,aes(x = seq(1,116),y = Glucose,colour = Classification))+geom_point()+xlab("")+ylab("Glucose")+theme_cyberpunk()
+d = ggplot(breast_data,aes(x = seq(1,116),y = Insulin,colour = Classification))+geom_point()+xlab("")+ylab("Insulin")+theme_cyberpunk()
+e = ggplot(breast_data,aes(x = seq(1,116),y = HOMA,colour = Classification))+geom_point()+xlab("")+ylab("HOMA")+theme_cyberpunk()
+f = ggplot(breast_data,aes(x = seq(1,116),y = Leptin,colour = Classification))+geom_point()+xlab("")+ylab("Leptin")+theme_cyberpunk()
+g = ggplot(breast_data,aes(x = seq(1,116),y = Adiponectin,colour = Classification))+geom_point()+xlab("")+ylab("Adinoceptin")+theme_cyberpunk()
+h = ggplot(breast_data,aes(x = seq(1,116),y = Resistin,colour = Classification))+geom_point()+xlab("")+ylab("Resistin")+theme_cyberpunk()
+j = ggplot(breast_data,aes(x = seq(1,116),y = MCP.1,colour = Classification))+geom_point()+xlab("")+ylab("MCP.1")+theme_cyberpunk()
+grid.arrange(a,b,c,d,e,f,g,h,j)
+```
+
+
+```{r eval=FALSE}
+breast_data = breast_data%>%filter(!HOMA>10)
+breast_data = breast_data%>%filter(!Glucose>150)
+#breast_data = breast_data%>%filter(!Insulin>40)
+#breast_data = breast_data%>%filter(!Leptin>75)
+#breast_data = breast_data%>%filter(!Adiponectin>30)
+breast_data = breast_data%>%filter(!Resistin>60)
+breast_data = breast_data%>%filter(!MCP.1>1500)
+
+```
+
+Değişkenler için aykırı değerler yukarıdaki gibi temizlenmiştir.
+
+
+```{r eval=FALSE}
+## Karar Ağacı/Dönüştürme Yok/bölünmeler gini indeksine göre/cv yok/min split ve max depth optimizasyonlu model
+set.seed(2077)
+n = NROW(breast_data)
+samples = sample(sample(1:n,size = round(.85*n)),replace = FALSE)
+train = breast_data[samples,]
+test = breast_data[-samples,]
+table(train$Classification)
+table(test$Classification)
+acc = NULL
+j = 0
+cv = 0
+mb = 0
+for(i in seq(1:30))
+{
+  j = j+1 
+  model <- rpart(Classification ~ ., train,control = rpart.control(minsplit = j,maxdepth = i,minbucket = mb))
+  pred1 <- predict(model, test, type="class")
+  cm = table(test$Classification,pred1)
+  accuracy_test <- sum(diag(cm)) / sum(cm)
+  acc[i] = accuracy_test
+}
+acc = as.data.frame(acc)
+ggplot(acc,aes(x = seq(1,30),y = acc,colour ="red"))+geom_linesaber()+theme_cyberpunk()+xlab("minCases")+ylab("Test Accuracy(%)")
+```
+
+Kurulan modelde en yüksek test doğruluğu K = 5-8 değerleri arasında 0.9375 olarak gözlemlenmektedir. En düşük test doğruluğu ise K = 18-30 değerleri arasında 0.6875	olarak gözlemlenmektedir.
+
+
+Optimal model Accuracy = 0.9375 minsplit = 5/maxdepth = 6 model için kurulan karar ağacı modeli ve grafiği aşağıdaki gibidir.
+
+```{r eval=FALSE}
+model <- rpart(Classification ~ ., train,control = rpart.control(minsplit = 5,maxdepth = 6,xval = 30))
+pred1 <- predict(model, test, type="class")
+library(rpart.plot)
+prp(model, type=0, extra=101)
+confusionMatrix(as.factor(pred1),as.factor(test$Classification))
+```
+
+Kurulan modelin Accuracy değeri 0.9375'dir. Sonuca göre oldukça iyi bir model oluşturulduğu yorumunu yapabiliriz.
+
+Oluşturduğumuz karar ağacında Pruning yani Budama işlemi yapıyoruz. Bunun nedeni overfit durumlarını çözmek içindir. 
+
+```{r eval=FALSE}
+cp = model$cptable # min cp = 0.01'e göre tekrar model kuruldu.
+puring = prune(model,cp = 0.01)
+prp(puring,type = 0,extra = 101)
+pred_puring = predict(puring,as.data.frame(test[,1:9]),type = "class")
+confusionMatrix(as.factor(pred_puring),as.factor(test$Classification))
+
+```
+
+
+### KNN-Minkowski Uzaklık Metriği
+
+```{r eval=FALSE}
+
+breast_data <- read_excel(tf)
+breast_data$Classification = as.factor(breast_data$Classification)
+breast_data = breast_data%>%filter(!HOMA>10)
+breast_data = breast_data%>%filter(!Glucose>150)
+breast_data = breast_data%>%filter(!Resistin>60)
+breast_data = breast_data%>%filter(!MCP.1>1500)
+breast_data[,1:9] = breast_data[,1:9]%>%lapply(scale)%>%as.data.frame()
+m <- dim(breast_data)[1]
+set.seed(2077)
+val <- sample(1:m, size = m/6, replace = FALSE) 
+learn <- breast_data[-val,]
+valid <- breast_data[val,]
+knn_error = NULL
+knn_acc = NULL
+for(i in 1:50)
+{
+  
+  breast.kknn <- kknn(Classification~., learn, valid, distance =3,k=i,kernel =  "inv",scale = F)
+  fit <- fitted(breast.kknn)
+  
+  cm = table(valid$Classification,fit)
+  error_rate<-100*(1-sum(diag(cm))/sum(cm))
+  knn_error[i] = error_rate
+  accuracy_test <- sum(diag(cm)) / sum(cm)
+  knn_acc[i] = accuracy_test
+}
+knn_error = as.data.frame(knn_error)
+knn_acc = as.data.frame(knn_acc)
+as.tibble(knn_error)
+p = ggplot(knn_error,aes(x = seq(1,50),y = knn_error))+geom_line()+theme_minimal()+xlab("minCases")+ylab("Test Error(%)")+geom_point()+theme_light()
+p1 = ggplot(knn_acc,aes(x = seq(1,50),y = knn_acc))+geom_line()+theme_minimal()+xlab("minCases")+ylab("Test Accuracy(%)")+geom_point()+theme_light()
+grid.arrange(arrangeGrob(p,p1,ncol = 1))
+```
+
+### Minkowski mesafe algoritması optimum model
+
+```{r eval=FALSE}
+breast.kknn <- kknn(Classification~., learn, valid, distance =3 ,
+                    kernel = "inv",scale = F,k = 26)
+summary(breast.kknn)
+fit <- fitted(breast.kknn)
+#confusionMatrix(as.factor(fit),as.factor(valid$Classification))
+#table(valid$Classification, fit)
+pcol <- as.character(as.numeric(valid$Classification))
+pairs(valid[1:9], pch = pcol, col = c("green3", "red")
+      [(valid$Classification != fit)+1])
+```
+
+
+
+```{r eval=FALSE}
+mt <-confusionMatrix(as.factor(fit),as.factor(valid$Classification))
+draw_confusion_matrix(mt)
+round(mt[3]$overall[1],3) %>%
+  kbl() %>%
+  kable_material_dark()
+```
+
+
+
+
+
+
+
+
+
+
+Şimdi de Insulin değişkenini çıkarıp yeni modelimizi kuralım.
+
+```{r eval=FALSE}
+# KNN Modeli %93,75 Test skor
+breast_data <- read_excel(tf)
+breast_data$Classification = as.factor(breast_data$Classification)
+breast_data = breast_data%>%select(-Insulin)
+breast_data = breast_data%>%filter(!HOMA>10)
+breast_data = breast_data%>%filter(!Glucose>150)
+breast_data = breast_data%>%filter(!Resistin>60)
+breast_data = breast_data%>%filter(!MCP.1>1500)
+breast_data[,1:8] = breast_data[,1:8]%>%lapply(scale)%>%as.data.frame()
+set.seed(2077)
+n = NROW(breast_data)
+samples = sample(sample(1:n,size = round(.85*n)),replace = FALSE)
+train = breast_data[samples,]
+test = breast_data[-samples,]
+table(train$Classification)
+table(test$Classification)
+acc = NULL
+j = 0
+cv = 0
+mb = 0
+for(i in seq(1:30))
+{
+  j = j+1 
+  cv = cv+1
+  model <- rpart(Classification ~ ., train,control = rpart.control(minsplit = j,maxdepth = i,minbucket = mb,xval = cv))
+  pred1 <- predict(model, test, type="class")
+  cm = table(test$Classification,pred1)
+  accuracy_test <- sum(diag(cm)) / sum(cm)
+  acc[i] = accuracy_test
+}
+acc = as.data.frame(acc)
+ggplot(acc,aes(x = seq(1,30),y = acc,colour ="red"))+geom_linesaber()+theme_cyberpunk()+xlab("minCases")+ylab("Test Accuracy(%)")
+
+```
+
+
+### Katmanlı Bölme Yöntemi - En iyi Test Skoru %93.3
+
+```{r eval=FALSE}
+breast_data <- read_excel(tf)
+breast_data$Classification = as.factor(breast_data$Classification)
+breast_data = breast_data%>%select(-Insulin)
+breast_data = breast_data%>%filter(!HOMA>10)
+breast_data = breast_data%>%filter(!Glucose>150)
+breast_data = breast_data%>%filter(!Resistin>60)
+breast_data = breast_data%>%filter(!MCP.1>1500)
+breast_data[,1:8] = breast_data[,1:8]%>%lapply(scale)%>%as.data.frame()
+set.seed(2077)
+train_indeks <- createDataPartition(breast_data$Classification, p = 0.85, list = FALSE, times = 1)
+train <- breast_data[train_indeks,]
+test <- breast_data[-train_indeks,]
+knn_error = NULL
+knn_acc = NULL
+for(i in 1:60)
+{
+  
+  breast.kknn <- kknn(Classification~., train, test, distance =3,k=i,kernel =  "inv",scale = F)
+  fit <- fitted(breast.kknn)
+  
+  cm = table(test$Classification,fit)
+  error_rate<-100*(1-sum(diag(cm))/sum(cm))
+  knn_error[i] = error_rate
+  accuracy_test <- sum(diag(cm)) / sum(cm)
+  knn_acc[i] = accuracy_test
+}
+knn_error = as.data.frame(knn_error)
+knn_acc = as.data.frame(knn_acc)
+knn_error
+ggplot(knn_error,aes(x = seq(1,60),y = knn_error))+geom_line()+theme_minimal()+xlab("minCases")+ylab("Test Error(%)")
+ggplot(knn_acc,aes(x = seq(1,60),y = 100*knn_acc))+geom_line()+theme_minimal()+xlab("K")+ylab("Test Accuracy(%)")
+```
+
+### Optimum Katmanlı Örnekleme & KNN Minkowski Model
+
+```{r eval=FALSE}
+breast.kknn <- kknn(Classification~., train, test, distance =3,k=7,kernel =  "inv",scale = F)
+fit <- fitted(breast.kknn)
+pcol <- as.character(as.numeric(test$Classification))
+pairs(train[1:8], pch = pcol, col = c("green3", "red")
+      [(test$Classification != fit)+1])
+op <-confusionMatrix(as.factor(fit),as.factor(test$Classification))
+
+draw_confusion_matrix(op)
+round(op[3]$overall[1],3) %>%
+  kbl() %>%
+  kable_material_dark()
+```
+
+
+# Kaynaklar :
+
+--------------------------------------------------------------------------------------
+
+- https://www.udemy.com/course/veri-bilimi-ve-makine-ogrenmesi-egitimi/
+
+- https://app.datacamp.com/learn/courses/machine-learning-with-caret-in-r
+
+- https://app.datacamp.com/learn/courses/supervised-learning-in-r-classification
+
+- https://app.datacamp.com/learn/courses/preprocessing-for-machine-learning-in-python
+
+-------------------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
