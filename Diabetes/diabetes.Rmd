@@ -1,0 +1,305 @@
+---
+title: "Diyabet Risk Sınıflandırma ve Analiz Çalışması"
+author: "Tolga"
+output:
+  rmdformats::downcute
+---
+
+<style type="text/css">
+.main-container {
+  max-width: 1800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, echo=FALSE}
+url <- "https://19mayishastanesi.com/wp-content/uploads/2019/09/diyabet.jpg"
+```
+
+
+<center><img src="`r url`"></center>
+
+
+
+# Kütüphaneler
+```{r,warning=FALSE,message=FALSE}
+library(dplyr)
+library(ggplot2)
+library(ggcorrplot)
+library(ROCR)
+library(vtable)
+library(gridExtra)
+library(rmdformats)
+library(caTools)
+library(plyr)
+library(nnet)
+library(caret)
+library(broom)
+```
+# Veri Yükleme - Ön Bakış
+## Veri Hakkında 
+Bu veri seti orijinal olarak Ulusal Diyabet ve Sindirim ve Böbrek Hastalıkları Enstitüsü'nden alınmıştır.
+Veri setinin amacı, veri setinde yer alan belirli tanısal ölçümlere dayanarak bir hastanın diyabetli olup olmadığını tanısal olarak tahmin etmektir. 
+Bu örneklerin daha büyük bir veritabanından seçilmesine çeşitli kısıtlamalar getirildi. Özellikle, buradaki tüm hastalar, Pima Kızılderili mirasına sahip en az 21 yaşında kadınlardır.
+
+### Değişkenler
+
+* Pregnancies : Toplam hamilelik sayısı
+* Glucose : Ölçülen,kandaki glukoz seviyesi
+* BloodPressure : Sistolik(Küçük) kan basıncı
+* SkinThickness : Cilt kalinlığı
+* Insulin : Ölçülen İnsülin değeri
+* BMI : Beden Kitle Endeksi (kilo/boy^2)
+* DiabetesPedigreeFunction : Diyabet soyağacı işlevi (aile öyküsüne göre diyabet olasılığını puanlayan bir işlev)
+* Age : Yaş
+* Outcome : Sınıflandırma Değişkeni (0 : Diyabet değil,1 : Diyabet)
+
+
+```{r}
+data = read.csv("C:/Users/tolga/Downloads/diabetes (1).csv")
+attach(data)
+head(data)
+```
+
+```{r}
+str(data)
+```
+* Veride toplam 768 satır ve 9 değişken vardır. Bütün değişkenler sayısal karakterdedir. 
+
+
+#### Eksik Gözlemlerin Tespit Edilmesi
+
+```{r}
+for(i in 1:NCOL(data))
+{
+  print(paste0(colnames(data)[i]," Değişkeninde ---->",sum(is.na(data[,i]))," Adet Eksik Gözlem Vardır."))
+}
+```
+ * Verideki değişkenlerin hiçbirinde eksik gözlem bulunmamaktadır.
+
+#### Tanımlayıcı İstatistikler
+
+```{r}
+st(data,add.median = T)
+```
+
+* Verideki sınıflama değişkeni olan Outcome değişkeninin 470(%66) tane gözlemi 0(hasta değil), 242(%34) tane gözlemi ise 1(hasta) olarak tespit edilmiştir.
+* Pregnancies değişkeninin ortalaması 3.88(~4), standart sapması 3.37, minimum 0 ve maksimum 17 olarak tespit edildi. Bazı değerler aykırı gözlem olarak sonuçlanabilir(örneğin 17 hamilelik gibi). Bunu ilerde inceleyeceğiz.
+* Glucose değişkeninin ortalaması 121 ve standart sapması 30.11, minimum 56, maksimum 199 olarak kaydedilmiştir. Değişkenin medyan değeri 117 dir. Ortalamadan farklı olması sebebiyle verinin dağılımında çarpıklık olabilir.
+
+* Insulin değişkeninin ortalaması 78 ve standart sapması 100.364, minimum 0, maksimum 495 olarak kaydedilmiştir. Değişkenin medyan değeri 45.5 dir. Ortalamadan çok uzak olması sebebiyle değişkenin dağılımında çarpıklık olması çok muhtemeldir.
+
+* BMI değişkeninin ortalaması 32.412 ve standart sapması 6.864, minimum 18.2, maksimum 67.1 olarak kaydedilmiştir. Değişkenin medyan değeri 32.35 dir. Ortalamadan Medyan değerinin ortalamadan çok uzak olmaması sebebiyle veride çarpıklık olmaması muhtemeldir.
+
+* Age değişkeninin ortalaması 33.281(~33) ve standart sapması 11.7, minimum 21, maksimum 81 olarak kaydedilmiştir. Değişkenin medyan değeri 29 dur. Ortalamadan farklı olması sebebiyle verinin dağılımında çarpıklık olabilir.
+
+
+## Veri Görselleştirme
+### Saçılım Grafikleri
+```{r,fig.height=10,fig.width=12}
+a = ggplot(data,aes(x = seq(1,dim(data)[1]),y = Pregnancies,colour = Outcome))+geom_point()+xlab("")+ylab("Pregnancies")+theme_minimal()+theme(legend.position  = "none")+facet_wrap(~Outcome)
+
+b = ggplot(data,aes(x = seq(1,dim(data)[1]),y = Glucose,colour =  Outcome))+geom_point()+xlab("")+ylab("Glucose")+theme_minimal()+theme(legend.position  = "none")+facet_wrap(~Outcome)
+
+c = ggplot(data,aes(x = seq(1,dim(data)[1]),y = BloodPressure,colour =  Outcome))+geom_point()+xlab("")+ylab("Blood Pressure")+theme_minimal()+theme(legend.position  = "none")+facet_wrap(~Outcome)
+
+d = ggplot(data,aes(x = seq(1,dim(data)[1]),y = SkinThickness,colour =  Outcome))+geom_point()+xlab("")+ylab("SkinThickness")+theme_minimal()+theme(legend.position  = "none")+facet_wrap(~Outcome)
+
+e = ggplot(data,aes(x = seq(1,dim(data)[1]),y = Insulin,colour =  Outcome))+geom_point()+xlab("")+ylab("Insulin")+theme_minimal()+theme(legend.position  = "none")+facet_wrap(~Outcome)
+
+f = ggplot(data,aes(x = seq(1,dim(data)[1]),y = BMI,colour =  Outcome))+geom_point()+xlab("")+ylab("BMI")+theme_minimal()+theme(legend.position  = "none")+facet_wrap(~Outcome)
+
+g = ggplot(data,aes(x = seq(1,dim(data)[1]),y = DiabetesPedigreeFunction,colour =  Outcome))+geom_point()+xlab("")+ylab("DiabetesPedigreeFunction")+theme_minimal()+theme(legend.position  = "none")+facet_wrap(~Outcome)
+
+h = ggplot(data,aes(x = seq(1,dim(data)[1]),y = Age,colour =  Outcome))+geom_point()+xlab("")+ylab("Age")+theme_minimal()+theme(legend.position  = "none")+facet_wrap(~Outcome)
+
+grid.arrange(arrangeGrob(a,b,c,d,e,f,g,h,ncol = 4))
+
+```
+* Saçılım grafikleri incelendiğinde bazı aykırı değerler çok net bir şekilde görülmektedir.
+
+
+### Denstiy Plot
+```{r}
+a = ggplot(data = data,aes(x = Age))+geom_density(aes(group = Outcome,fill = Outcome),alpha = .3,adjust = 2)+ylab("")+xlab("Age")+theme_light()+theme(legend.position  = "none")
+b = ggplot(data,aes(x = Pregnancies,fill = Outcome,group = Outcome))+geom_density(alpha = .3)+ylab("")+xlab("Pregnancies")+theme_light()+theme(legend.position  = "none")
+c = ggplot(data,aes(x = Glucose,fill = Outcome,group = Outcome))+geom_density(alpha = .3)+ylab("")+xlab("Glucose")+theme_light()+theme(legend.position  = "none")
+d = ggplot(data,aes(x = BloodPressure,fill = Outcome,group = Outcome))+geom_density(alpha = .3)+ylab("")+xlab("BloodPressure")+theme_light()+theme(legend.position  = "none")
+e = ggplot(data,aes(x = SkinThickness,fill = Outcome,group = Outcome))+geom_density(alpha = .3,adjust = 2)+ylab("")+xlab("SkinThickness")+theme_light()+theme(legend.position  = "none")
+f = ggplot(data,aes(x = Insulin,fill = Outcome,group = Outcome))+geom_density(alpha = .3,adjust = 2)+ylab("")+xlab("Insulin")+theme_light()+theme(legend.position  = "none")
+g = ggplot(data,aes(x = BMI,fill = Outcome,group = Outcome))+geom_density(alpha = .3,adjust = 2)+ylab("")+xlab("BMI")+theme_light()+theme(legend.position  = "none")
+h = ggplot(data,aes(x = DiabetesPedigreeFunction,fill = Outcome,group = Outcome))+geom_density(alpha = .3,adjust = 2)+ylab("")+xlab("DiabetesPedigreeFunction")+theme_light()+theme(legend.position  = "none")
+
+grid.arrange(arrangeGrob(a,b,c,d,e,f,g,h,ncol = 4))
+
+```
+* Gruplandırılmış dağılım grafiğini incelediğimizde genellikle iki grup bütün değişkenlerde aynı dağılsa da özellikle Pregnancies,Glucose ve Insülin değişkenlerinde dağılım olarak bazı farklılıklar mevcut.
+
+
+### Hedef Değişken
+```{r}
+data_outcome = table(data$Outcome)%>%as.data.frame()
+ggplot(data_outcome,aes(x = Var1,y = Freq,fill = "#F794"))+geom_bar(stat = "identity")+theme_minimal()+xlab("Outcome")+theme(legend.position = "none")
+```
+
+Veride hasta olmama durumu(0), hasta olma durumu(1) göre daha baskındır.
+
+### Boxplot
+```{r,warning=FALSE,message=FALSE,fig.height=10,fig.width=12}
+a = ggplot(data,aes(x = seq(1,dim(data)[1]),y = Pregnancies))+geom_boxplot()+xlab("")+ylab("Pregnancies")+theme_minimal()+theme(legend.position  = "none")
+
+b = ggplot(data,aes(x = seq(1,dim(data)[1]),y = Glucose))+geom_boxplot()+xlab("")+ylab("Glucose")+theme_minimal()+theme(legend.position  = "none")
+
+c = ggplot(data,aes(x = seq(1,dim(data)[1]),y = BloodPressure))+geom_boxplot()+xlab("")+ylab("Blood Pressure")+theme_minimal()+theme(legend.position  = "none")
+
+d = ggplot(data,aes(x = seq(1,dim(data)[1]),y = SkinThickness))+geom_boxplot()+xlab("")+ylab("SkinThickness")+theme_minimal()+theme(legend.position  = "none")
+
+e = ggplot(data,aes(x = seq(1,dim(data)[1]),y = Insulin))+geom_boxplot()+xlab("")+ylab("Insulin")+theme_minimal()+theme(legend.position  = "none")
+
+f = ggplot(data,aes(x = seq(1,dim(data)[1]),y = BMI))+geom_boxplot()+xlab("")+ylab("BMI")+theme_minimal()+theme(legend.position  = "none")
+
+g = ggplot(data,aes(x = seq(1,dim(data)[1]),y = DiabetesPedigreeFunction))+geom_boxplot()+xlab("")+ylab("DiabetesPedigreeFunction")+theme_minimal()+theme(legend.position  = "none")
+
+h = ggplot(data,aes(x = seq(1,dim(data)[1]),y = Age))+geom_boxplot()+xlab("")+ylab("Age")+theme_minimal()+theme(legend.position  = "none")
+
+grid.arrange(arrangeGrob(a,b,c,d,e,f,g,h,ncol = 4))
+
+```
+
+
+* Kutu grafikleri incelendiğinde aykırı değerlerin olduğu değişkenler net bir şekilde görülmektedir.
+
+* Yaş değişkenini kategorilerine ayırıp görselleştirelim.
+```{r}
+Age_Cat <- ifelse(data$Age < 21, "<21", 
+                   ifelse((data$Age>=21) & (data$Age<=25), "21-25", 
+                   ifelse((data$Age>25) & (data$Age<=30), "25-30",
+                   ifelse((data$Age>30) & (data$Age<=35), "30-35",
+                   ifelse((data$Age>35) & (data$Age<=40), "35-40",
+                   ifelse((data$Age>40) & (data$Age<=50), "40-50",
+                   ifelse((data$Age>50) & (data$Age<=60), "50-60",">60")))))))
+Age_Cat <- factor(Age_Cat, levels = c('<21','21-25','25-30','30-35','35-40','40-50','50-60','>60'))
+age_cat = table(Age_Cat)%>%as.data.frame()
+age_cat
+ggplot(age_cat,aes(x = Age_Cat,y = Freq,fill = "#F794"))+geom_bar(stat = "identity")+theme_minimal()+xlab("Age by Factor")+theme(legend.position = "none")
+
+```
+* Veride en çok bulunan yaş aralığı 21-25 yaş aralığıdır. En az bulunan yaş aralığı ise 27 gözlem ile >60 yaştır. Veride 21 yaşından küçük kimse bulunmamaktadır.
+
+## Aykırı Değerler
+* Saçılım ve kutu grafiğinden yola çıkarak bazı aykırı değerleri modelin etkilenmemesi için çıkarabiliriz. Burada IQR yöntemi de kullanılabilir ancak elimizde çok fazla gözlem bulunmadığı için çok fazla gözlem kaybetmek model için iyi bir sonuç olmayacaktır.
+```{r}
+data = data%>%filter(Glucose>=50)
+data = data%>%filter(BloodPressure>=30)
+data = data%>%filter(SkinThickness<=75)
+data = data%>%filter(Insulin<=500)
+data = data%>%filter(BMI!=0)
+```
+
+
+
+## Correlation
+```{r}
+corr = round(cor(data[,-dim(data)[2]]),1)
+ggcorrplot(corr,lab = T)
+```
+Verideki değişkenlerin kendi arasındaki korelasyonlar incelendiğinde sadece yaş ve hamilelik arasında pozitif yönlü zayıf ilişki mevcut.
+
+# Multinomial Lojistik Regresyon
+
+## Referans Seçimi
+* Hasta olmama durumunu referans değişken olarak seçelim.
+```{r}
+data$Outcome = as.factor(data$Outcome)
+data$Outcome = relevel(data$Outcome,ref = "0")
+```
+
+## Model Kurulması
+```{r}
+model = multinom(Outcome ~ ., data = data)
+summary(model)
+coefs_odds = exp(coef(model))
+coefs_odds%>%round(4)
+```
+Lojistik Regresyon katsayılarının sonucuna göre ;
+
+* Hamilelik sayısındaki 1 birimlik artış hasta olmama durumu ile kıyaslandığında hasta olma olasılıklarını 1.13 kat artırmaktadır.
+* Glukoz seviyesindeki 1 birimlik artış hasta olmama durumu ile kıyaslandığında hasta olma olasılıklarını 1.03 kat artırmaktadır.
+* Kan basıncı seviyesindeki 1 birimlik artış hasta olmama durumu ile kıyaslandığında 0.99 kat artırmakta (%1 azaltakta).
+* SkinThickness seviyesindeki 1 birimlik artış hasta olmama durumu ile kıyaslandığında hasta olma olasılığını 0.99 kat artırmakta (yaklaşk olarak %1 azaltmakta).
+* Insülin seviyesindeki 1 birimlik artış hasta olmama durumu ile kıyaslandığında hasta olma olasılığını 0.99 kat artırmakta (yaklaşık olarak %1 azaltmakta)
+* BMI seviyesindeki 1 birimlik artış hasta olmama durumu ile kıyaslandığında hasta olma olasılığını 1.10 kat artırmaktadır.
+* DiabetesPedigreeFunction seviyesindeki 1 birimlik artış hasta olmama durumu ile kıyaslandığında hasta olma olasılığını 3.32 kat artırmaktadır.
+* Yaş değişkenindeki 1 birimlik artış hasta olmama durumu ile kıyaslandığında hasta olma olasılığını 1.01 kat artırmaktadır
+
+
+## Anlamlılığın İncelenmesi
+```{r}
+z = summary(model)$coefficients/summary(model)$standard.errors
+pnorm(abs(z),lower.tail = F)*2
+```
+Elde edilen sonuçlara göre bütün değişkenlere ilişkin katsayılar istatistiksel olarak anlamlıdır p< 0.05
+
+# Binomial Lojistik Regresyon
+## Train-Test Split
+* Verisetinin %80'ini(570) train,%20'sini(142) test olarak bölelim.
+```{r}
+set.seed(121518064)
+index = sample.split(data$Outcome,SplitRatio = 0.8)
+train = data[index == T,]
+test = data[index == F,]
+```
+## Model Kurulması
+```{r}
+
+binomial_model = glm(Outcome~.,family = "binomial",data = train)
+summary(binomial_model)
+```
+Kurulan binomial lojistik regresyon modelinin sonucu incelendiğinde Hamilelik sayısı, Glukoz seviyesi,BMI ve DiabetesPedigreeFuntion değişkenlerinin p değeri <0.05 olduğu için Diyabetle ilişkisi vardır. p değerlerine göre diyabetle ilişkisi en az olan değişken SkinThickness(Cilt kalınlığı) olduğu tespit edilmiştir.
+
+
+```{r}
+varImp(binomial_model)
+```
+Değişkenlerin modeldeki etkilerini incelediğimizde ise en etkili ilk 3 değişken Glucose, BMI ve Pregnancies değişkenleridir. En etkisiz 3 değişken ise SkinThickness, Insulin ve Age değişkenleridir.
+
+Test Seti Üzerinde Tahmin Yapalım
+```{r}
+pred = predict(binomial_model,type = "response",newdata = test%>%select(-Outcome))
+test_table = table(test$Outcome,pred>0.5)
+accuracy_test = round(sum(diag(test_table))/sum(test_table),2)
+print(paste0("Test Seti Üzerindeki Tahmin Performansı  : ",accuracy_test))
+test_table
+```
+
+
+* Model için genel hata oranı (14+21)/80  = 0.43, kesinlik oranı ise 27/(27+21) = 0.56. Modelin hata oranı çok düşük olmasa da kesinlik oranı yüksektir.
+
+
+# ROC EĞRİSİ
+
+Modelin AUC değerini hesaplayalım
+```{r}
+pred = prediction(pred,test$Outcome)
+auc = performance(pred,measure = "auc")
+print(paste0("AUC Değeri : ",auc@y.values))
+```
+Modelin AUC değeri 0.82 olarak bulundu. 0.80'den büyük olduğu için modelin iki kategoriyi ayırt etmekte iyi bir iş çıkardığını söyleyebiliriz.
+
+```{r}
+
+roc = performance(pred,"tpr","fpr")
+plot(roc,colorize = T)
+```
+
+* ROC eğrisinin altında kalan alan geniştir ve Tpr oranı yani hasta olanları tespit etme oranımız yüksektir.
+
+
