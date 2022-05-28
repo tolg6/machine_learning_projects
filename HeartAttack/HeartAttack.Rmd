@@ -1,0 +1,392 @@
+---
+title: "Kalp Krizi Riski Tahmin Analizi"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+  word_document: default
+---
+
+
+
+```{r, echo=FALSE}
+url <- "https://miro.medium.com/max/1200/1*NGaPtWP9F8C70FvibMtJ6Q.jpeg"
+```
+
+
+<center><img src="`r url`"></center>
+
+
+# Kütüphaneler
+```{r,warning=FALSE,message=FALSE}
+library("httr")
+library("readxl")
+library(RCurl)
+library(dplyr)
+library(ggplot2)
+library(stringr)
+library(rpart)
+library(kknn)
+library(plyr)
+library(rpart.plot)
+library(kableExtra)
+library(ggCyberPunk)
+library(gridExtra)
+library(corrplot)
+library(caret)
+library(kknn)
+```
+
+## Veriyi içeri aktarma
+```{r,warning=FALSE,message=FALSE}
+url = "https://drive.google.com/uc?export=download&id=1neQgW1SPX95_Z9-2qGM0actyQbygXTMB"
+GET(url = url, write_disk(tf <- tempfile(fileext= ".csv")))
+data <- read.csv(tf)
+data = as.data.frame(data)
+attach(data)
+```
+Bu veri serti hakkında;
+
+
+*Yaş : Hastanın yaşı*
+
+*Cinsiyet : Hastanın cinsiyeti*
+
+*exang: egzersize bağlı angina (1 = evet; 0 = hayır)*
+
+*ca: büyük gemi sayısı (0-3)*
+
+*cp : Göğüs Ağrısı tipi Göğüs ağrısı tipi*
+
+*trtbps : dinlenme kan basıncı (mm Hg olarak)*
+
+*chol : BMI sensörü aracılığıyla alınan mg/dl cinsinden kolestrol*
+
+*fbs : (açlık kan şekeri > 120 mg/dl) (1 = doğru; 0 = yanlış)*
+
+*rest_ecg : dinlenme elektrokardiyografik sonuçları*
+
+*thalach : ulaşılan maksimum kalp hızı*
+
+*target : 0= daha az kalp krizi geçirme olasılığı 1= daha fazla kalp krizi geçirme olasılığı*
+```{r}
+str(data)
+```
+
+
+Veride 14 değişken vardır. Değişkenlerin hepsi nümerik türdedir ancak bazıları binary olduğu için bunlar faktör olarak dönüştürülebilir.Hedef değişkenimiz *output* değişkenidir.
+Verisetinde karakter türündeki değişkenleri ve 0-1 binary olan değişkenleri faktöre çevirelim. 
+
+
+```{r}
+for(i in 1:length(colnames(data)))
+{
+  if(typeof(data[,i]) == "character")
+  {
+    data[,i] = as.factor(data[,i])
+    cat("Change to Factor------>",colnames(data)[i],'\n')
+  }
+}
+data[,c(2,3,6,7,9,11,12,13,14)] = data[,c(2,3,6,7,9,11,12,13,14)]%>%lapply(factor)
+```
+
+```{r}
+cat("Eksik Gözlem Sayısı ------->",sum(is.na(data)))
+```
+Veri setinde eksik gözlem bulunmamaktadır.
+
+Şimdi de verideki nümerik değişkenlerin korelasyonlarını inceleyelim.
+```{r}
+m = cor(data[,c(1,4,5,8,10)])
+corrplot(m,method = "number")
+
+```
+
+Çıktıyı incelediğimizde *thalachh* ve *age* değişkenleri arasında, *thallach* ve *oldpeak* değişkenleri arasında negatif zayıf ilişki vardır.Çoklu bağlantı sorunuyla karşılaşılırsa bu değişkenlerden bazıları analizden çıkarilabilir.
+
+# Veri Görselleştirme
+```{r,warning=FALSE,message=FALSE}
+a = ggplot(data,aes(x = seq(1,303),y = age,colour = output))+geom_point()+xlab("")+ylab("Age")+theme_minimal()
+b = ggplot(data,aes(x = seq(1,303),y = trtbps,colour =  output))+geom_point()+xlab("")+ylab("Trtbps")+theme_minimal()
+c = ggplot(data,aes(x = seq(1,303),y = chol,colour =  output))+geom_point()+xlab("")+ylab("Chol")+theme_minimal()
+d = ggplot(data,aes(x = seq(1,303),y = thalachh,colour =  output))+geom_point()+xlab("")+ylab("thallachh")+theme_minimal()
+e = ggplot(data,aes(x = seq(1,303),y = oldpeak,colour =  output))+geom_point()+xlab("")+ylab("oldpeak")+theme_minimal()
+grid.arrange(arrangeGrob(a,b,c,d,e,ncol = 2))
+```
+Verisetindeki hedef değişken 0 *az riskli* ve 1 *çok riskli* olacak şekilde sınıflandırılmıştır. Hedef değişkenin sınıflandırması hemen hemen aynıdır burada bir dengesizlik durumu bulunmamakta.
+```{r}
+table(data$output)
+```
+
+
+```{r}
+a = ggplot(data,aes(x = seq(1,303),y = age,colour = output))+geom_boxplot()+xlab("")+ylab("Age")
+b = ggplot(data,aes(x = seq(1,303),y = trtbps,colour =  output))+geom_boxplot()+xlab("")+ylab("trtbps")
+c = ggplot(data,aes(x = seq(1,303),y = chol,colour =  output))+geom_boxplot()+xlab("")+ylab("chol")
+d = ggplot(data,aes(x = seq(1,303),y = thalachh,colour =  output))+geom_boxplot()+xlab("")+ylab("thalachh")
+e = ggplot(data,aes(x = seq(1,303),y = oldpeak,colour =  output))+geom_boxplot()+xlab("")+ylab("oldpeak")
+grid.arrange(arrangeGrob(a,b,c,d,e,ncol = 2))
+```
+
+
+Boxplotlar incelendiğinde *chol* , *oldpeak* ve *trtbps* değişkenlerinde aykırı gözlemler görülüyor, bunlar analizin devamında çıkarılacak.
+
+### Cinsiyet ve Numerik Değişkenler
+```{r}
+a = ggplot(data,aes(x = seq(1,303),y = age,colour = sex))+geom_point()+xlab("")+ylab("Age")
+b = ggplot(data,aes(x = seq(1,303),y = trtbps,colour =  sex))+geom_point()+xlab("")+ylab("Trtbps")
+c = ggplot(data,aes(x = seq(1,303),y = chol,colour =  sex))+geom_point()+xlab("")+ylab("chol")
+d = ggplot(data,aes(x = seq(1,303),y = thalachh,colour = sex))+geom_point()+xlab("")+ylab("thalachh")
+e = ggplot(data,aes(x = seq(1,303),y = oldpeak,colour = sex))+geom_point()+xlab("")+ylab("oldpeak")
+grid.arrange(arrangeGrob(a,b,c,d,e,ncol = 2))
+```
+
+
+
+### Density Plot by Target Variable
+```{r}
+mu <- ddply(data, "output", summarise, grp.mean=mean(age))
+a = ggplot(data,aes(x = age,fill = output))+geom_density(alpha = .3)+ylab("")+xlab("Age")+geom_vline(data=mu, aes(xintercept=grp.mean, color=output))+theme_light()
+mu <- ddply(data, "output", summarise, grp.mean=mean(trtbps))
+b = ggplot(data,aes(x = trtbps,fill = output))+geom_density(alpha = .3)+ylab("")+xlab("Trtbps")+geom_vline(data=mu, aes(xintercept=grp.mean, color=output))+theme_light()
+mu <- ddply(data, "output", summarise, grp.mean=mean(chol))
+c = ggplot(data,aes(x = chol,fill = output))+geom_density(alpha = .3)+ylab("")+xlab("Chol")+geom_vline(data=mu, aes(xintercept=grp.mean, color=output))+theme_light()
+mu <- ddply(data, "output", summarise, grp.mean=mean(thalachh))
+d = ggplot(data,aes(x = thalachh,fill = output))+geom_density(alpha = .3)+ylab("")+xlab("thalachh")+geom_vline(data=mu, aes(xintercept=grp.mean, color=output))+theme_light()
+mu <- ddply(data, "output", summarise, grp.mean=mean(oldpeak))
+e = ggplot(data,aes(x = oldpeak,fill = output))+geom_density(alpha = .3)+ylab("")+xlab("oldpeak")+geom_vline(data=mu, aes(xintercept=grp.mean, color=output))+theme_light()
+
+grid.arrange(arrangeGrob(a,b,c,d,e,ncol = 2))
+```
+
+
+
+
+*Hedef değişkenine göre dağılımlar aynıdır.*
+
+
+# Model Kurulması
+
+## Karar Ağacı Modeli
+
+İlk olarak verinin %75'i train kalan kısmı test seti olarak ayrıldı. Bu ayrımın sonucunda train setinde hedef değişkendeki sınıf dağılımı *0 = 94 ve 1 = 126*, test sette ise *0 = 44 ve 1 = 39* olacak şekilde rastgele parçalanmıştır.
+```{r,warning=FALSE,message=FALSE}
+set.seed(1996)
+n = NROW(data)
+samples = sample(sample(1:n,size = round(.75*n)),replace = FALSE)
+train = data[samples,]
+test = data[-samples,]
+accuracy = NULL
+j = 0
+for(i in seq(1:30))
+{
+  j = j+1 
+  model <- rpart(output ~ ., train,control = rpart.control(minsplit = j,maxdepth = i))
+  pred1 <- predict(model, test, type="class")
+  cm = table(test$output,pred1)
+  accuracy_test <- sum(diag(cm)) / sum(cm)
+  accuracy[i] = accuracy_test
+}
+accuracy = as.data.frame(accuracy)
+ggplot(accuracy,aes(x = seq(1,30),y = accuracy,colour = "red"))+geom_line()+xlab("")+ylab("Accuracy")+theme_minimal()+geom_point()
+```
+
+Ana modeli kuralım.
+
+```{r}
+
+model <- rpart(output ~ ., train,control = rpart.control(minsplit = 15,maxdepth = 15))
+pred1 <- predict(model, test, type="class")
+cm = table(test$output,pred1)
+accuracy = sum(diag(cm)) / sum(cm)
+rpart.plot(model,type = 0)
+model = "DecisionTree"
+model_performance =data.frame(model,accuracy)
+```
+
+
+
+
+
+
+
+
+Ana modelin test seti performansı %88'dir. Şimdi farklı metrikler deneyerek model kuralım.
+
+# KNN Modeli
+Kurulacak yeni modelde aynı şekilde %75 train %25 test seti olarak ayrılacaktır.Bu sefer veriye ölçeklendirme de uygulanacak.
+```{r echo=TRUE, warning=FALSE}
+data <- read.csv(tf)
+data = as.data.frame(data)
+data[,c(1,4,5,8,10)] = data[,c(1,4,5,8,10)]%>%lapply(scale)%>%as.data.frame()
+data[,c(2,3,6,7,9,11,12,13,14)] = data[,c(2,3,6,7,9,11,12,13,14)]%>%lapply(factor)
+n <- NROW(data)[1]
+set.seed(123)
+samples = sample(sample(1:n,size = round(.75*n)),replace = FALSE)
+train = data[samples,]
+test = data[-samples,]
+knn_error = NULL
+knn_acc = NULL
+for(i in 1:60)
+{
+  
+  data.kknn <- kknn(output~., train, test, distance =1,k=i,kernel =  "inv",scale = F)
+  fit <- fitted(data.kknn)
+  
+  cm = table(test$output,fit)
+  error_rate<-100*(1-sum(diag(cm))/sum(cm))
+  knn_error[i] = error_rate
+  accuracy_test <- sum(diag(cm)) / sum(cm)
+  knn_acc[i] = accuracy_test
+}
+knn_error = as.data.frame(knn_error)
+knn_acc = as.data.frame(knn_acc)
+p = ggplot(knn_error,aes(x = seq(1,60),y = knn_error))+geom_line()+theme_minimal()+xlab("")+ylab("Test Error")+geom_point()+theme_light()
+p1 = ggplot(knn_acc,aes(x = seq(1,60),y = knn_acc))+geom_line()+theme_minimal()+xlab("")+ylab("Test Accuracy")+geom_point()+theme_light()
+grid.arrange(arrangeGrob(p,p1,ncol = 1))
+```
+
+
+
+
+
+
+
+
+
+
+Kurulan bu modelde en yüksek test doğruluğu K = 11.değerde ~%85 olarak bulunmuştur.
+Ana modeli kuralım.
+```{r}
+data.kknn <- kknn(output~., train, test, distance =1,k=11,kernel =  "inv",scale = F)
+fit <- fitted(data.kknn)
+cm = table(test$output,fit)
+error_rate<-100*(1-sum(diag(cm))/sum(cm))
+accuracy <- sum(diag(cm)) / sum(cm)
+model_performance[nrow(model_performance) + 1,] = c("KNN-NoScale",accuracy)
+```
+
+
+
+Şimdi de veriden aykırı gözlemleri çıkarıp tekrar model kuralım.Burada *chol* değişkeni 400'den büyük olan ve *oldpeak* değişkeninde 4 ten büyük olanlar çıkarılacak ve scale yapılmış veriyle tekrar model kurulacak.
+```{r}
+data <- read.csv(tf)
+data = as.data.frame(data)
+data[,c(2,3,6,7,9,11,12,13,14)] = data[,c(2,3,6,7,9,11,12,13,14)]%>%lapply(factor)
+data = data%>%filter(!chol>400)
+data = data%>%filter(!oldpeak>4)
+data[,c(1,4,5,8,10)] = data[,c(1,4,5,8,10)]%>%lapply(scale)%>%as.data.frame()
+n <- NROW(data)[1]
+set.seed(1996)
+samples = sample(sample(1:n,size = round(.85*n)),replace = FALSE)
+train = data[samples,]
+test = data[-samples,]
+knn_error = NULL
+knn_acc = NULL
+for(i in 1:60)
+{
+  
+  data.kknn <- kknn(output~., train, test, distance =1,k=i,kernel =  "inv",scale = F)
+  fit <- fitted(data.kknn)
+  
+  cm = table(test$output,fit)
+  error_rate<-100*(1-sum(diag(cm))/sum(cm))
+  knn_error[i] = error_rate
+  accuracy_test <- sum(diag(cm)) / sum(cm)
+  knn_acc[i] = accuracy_test
+}
+knn_error = as.data.frame(knn_error)
+knn_acc = as.data.frame(knn_acc)
+p = ggplot(knn_error,aes(x = seq(1,60),y = knn_error))+geom_line()+theme_minimal()+xlab("")+ylab("Test Error(%)")+geom_point()+theme_light()
+p1 = ggplot(knn_acc,aes(x = seq(1,60),y = knn_acc))+geom_line()+theme_minimal()+xlab("")+ylab("Test Accuracy(%)")+geom_point()+theme_light()
+grid.arrange(arrangeGrob(p,p1,ncol = 1))
+
+```
+
+
+
+Optimal modeli kuralım.
+
+```{r}
+data.kknn <- kknn(output~., train, test, distance =1,k=13,kernel =  "inv",scale = F)
+fit <- fitted(data.kknn)
+cm = table(test$output,fit)
+error_rate<-100*(1-sum(diag(cm))/sum(cm))
+accuracy <- sum(diag(cm)) / sum(cm)
+model_performance[nrow(model_performance) + 1,] = c("KNNOutlier",accuracy)
+```
+
+
+Şimdi de aykırı gözlemleri veriden çıkarıp karar ağacı modeli kuralım.
+# Karar Ağacı(Aykırı Gözlemler Çıkarılmış)
+```{r,warning=FALSE,message=FALSE}
+data <- read.csv(tf)
+data = as.data.frame(data)
+data[,c(2,3,6,7,9,11,12,13,14)] = data[,c(2,3,6,7,9,11,12,13,14)]%>%lapply(factor)
+data = data%>%filter(!chol>400)
+data = data%>%filter(!oldpeak>4)
+data[,c(1,4,5,8,10)] = data[,c(1,4,5,8,10)]%>%lapply(scale)%>%as.data.frame()
+n <- NROW(data)[1]
+set.seed(1996)
+samples = sample(sample(1:n,size = round(.8*n)),replace = FALSE)
+train = data[samples,]
+test = data[-samples,]
+acc = NULL
+j = 0
+cv = 0
+mb = 0
+for(i in seq(1:30))
+{
+  j = j+1 
+  model <- rpart(output ~ ., train,control = rpart.control(minsplit = j,maxdepth = i,minbucket = mb,xval = 1))
+  pred1 <- predict(model, test, type="class")
+  cm = table(test$output,pred1)
+  accuracy_test <- sum(diag(cm)) / sum(cm)
+  acc[i] = accuracy_test
+}
+acc = as.data.frame(acc)
+ggplot(acc,aes(x = seq(1,30),y = acc,colour ="purple"))+geom_line()+theme_classic()+xlab("")+ylab("Test Accuracy")+geom_point()
+```
+
+
+
+
+
+Optimal model
+```{r}
+model <- rpart(output ~ ., train,control = rpart.control(minsplit = 29,maxdepth = 29,minbucket = 0,xval = 1))
+pred1 <- predict(model, test, type="class")
+cm = table(test$output,pred1)
+accuracy <- sum(diag(cm)) / sum(cm)
+rpart.plot(model,type = 0)
+model_performance[dim(model_performance)[1]+1,] = c("DecisionTreeOutlier",accuracy)
+
+```
+
+```{r}
+ggplot(model_performance,aes(x = model,y = round(as.numeric(accuracy),2),fill = model))+geom_bar(stat = "identity")+xlab("Models")+ylab("Accuracy")+theme_minimal()
+```
+
+
+
+Accuracy değeri en yüksek çıkan model Outlierları temizlenmiş olan k = 13 parametreli KNN modeli olarak bulundu.
+
+```{r}
+data <- read.csv(tf)
+data = as.data.frame(data)
+data[,c(2,3,6,7,9,11,12,13,14)] = data[,c(2,3,6,7,9,11,12,13,14)]%>%lapply(factor)
+data = data%>%filter(!chol>400)
+data = data%>%filter(!oldpeak>4)
+data[,c(1,4,5,8,10)] = data[,c(1,4,5,8,10)]%>%lapply(scale)%>%as.data.frame()
+n <- NROW(data)[1]
+set.seed(1996)
+samples = sample(sample(1:n,size = round(.85*n)),replace = FALSE)
+train = data[samples,]
+test = data[-samples,]
+data.kknn <- kknn(output~., train, test, distance =1,k=13,kernel =  "inv",scale = F)
+fit <- fitted(data.kknn)
+cm = table(test$output,fit)
+error_rate<-100*(1-sum(diag(cm))/sum(cm))
+accuracy <- sum(diag(cm)) / sum(cm)
+confusionMatrix(as.factor(fit),as.factor(test$output))
+```
