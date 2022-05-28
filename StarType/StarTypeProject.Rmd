@@ -1,0 +1,733 @@
+---
+title:  "<center>\n![](https://d2r55xnwy6nx47.cloudfront.net/uploads/2022/01/One_galaxy_1920x1080_STILL_Lede.jpg){width=12in,length=2in}   \n</center>\n\n Veri Madenciliği Final Ödevi\n
+  \ "
+output:
+  html_document:
+    theme: simplex
+    highlight: textmate
+    fontsize: 8pt
+    toc: yes
+    number_sections: no
+    code_download: no
+    keep_md : true
+    toc_float:
+      collapsed: yes
+  word_document:
+    toc: yes
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+---
+
+-------------------------------------------
+
+<style type="text/css">
+.main-container {
+  max-width: 1800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+
+
+
+-  **Eda EMANET 121518015**
+ 
+-  **Tolga KURT 121520824** 
+ 
+-  **Ramazan YALÇIN 121519821**
+ 
+ 
+------------------------------------------------
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+
+
+setwd("C:/Users/tolga/Downloads")
+```
+
+**Kaynak:** https://www.kaggle.com/deepu1109/star-dataset
+
+**Açıklama:**  
+
+- Verimizde 240 yıldıza ait sınıflandırmalar ye almaktadır. İlgili yıldıza ait değişkenleri kullanarak, ayırdığımız test setindeki yıldızların
+türlerini tahmin etmek amacıyla, denetimli öğrenme metodu olan destek vektör makinelerini kullanacağız.
+
+**Değişken Açıklamaları:**
+
++ *Temperature (K):* Sıcaklık (K).
++ *Luminosity(L/Lo):* Parlaklık (L/Lo).
++ *Radius(R/Ro):* Yarıçap (R/Ro).
++ *Absolute magnitude(Mv):* Mutlak büyüklük (Mv).
++ *Star type:* Yıldız türü.
++ *Star color:* Yıldız rengi.
++ *Spectral Class:* Spektral sınıf.
+
+-  Lo = 3.828 x 10^26 Watts (Avg Luminosity of Sun)
+-  Ro = 6.9551 x 10^8 m (Avg Radius of Sun
+
+Ödevimizde kullanacağımız gerekli kütüphane yüklemeleri aşağıda yapılmıştır.
+
+```{r warning=FALSE, message=FALSE}
+library(e1071)
+library(UpSetR)
+library(tidyverse)
+library(summarytools)
+library(plyr)
+library(dplyr)
+library(purrr)
+library(rio)
+library(arsenal)  #düzgün özet tablosu oluşturmak 
+library(kableExtra)
+library(tm)
+library(ggpubr) #normallik için
+library(Hmisc)
+library(dlookr)
+library(ISLR)
+library(funModeling)
+library(caret)
+library(GGally)
+library(pROC)
+library(kernlab) #svm icin
+library(ROCR) #roc icin
+library(cli)
+library(mlbench)
+library(ggcharts)
+library(timetk)
+library(corrplot)
+library(ggcorrplot)
+library(gridExtra)
+library(MLmetrics)
+library(fastDummies)
+library(REdaS)
+library(cvms)
+library(ggplot2)
+library(ggimage)
+library(ggthemes)
+library(grid)
+library(ggdark)
+library(scales)
+library(ggthemr)
+#devtools::install_github('Mikata-Project/ggthemr')
+#devtools::install_github("berndbischl/ParamHelpers") # version >= 1.11 needed.
+#devtools::install_github("jakob-r/mlrHyperopt", dependencies = FALSE)
+
+#library(mlrHyperopt)
+```
+
+Veri setimiz csv formatındadır. read_csv komutu ile verimizi çekiyoruz. Daha sonra dummy değişken için df1 adında yeni bir veri oluşturuyoruz. Verimizdeki faktör tanımlamalarını yapıyoruz. Star type değişkenindeki sınıflandırmayı isimlendiriyoruz ve değişken adını Type olarak değiştiriyoruz.
+
+```{r warning=FALSE, include=FALSE}
+library(mice)
+df1= read_csv("C:/Users/tolga/Desktop/star.csv") # dummy değişken için
+df= read_csv("C:/Users/tolga/Desktop/star.csv")
+df$`Star type` <- as.factor(df$`Star type`)
+df$`Star color` <- as.factor(df$`Star color`)
+df$`Spectral Class` <- as.factor(df$`Spectral Class`)
+data = read.csv("C:/Users/tolga/Downloads/6 class csv.csv") # Görselleştirme için kullanılacak...
+data$Star.type = as.factor(data$Star.type)
+image = "https://i.pinimg.com/originals/87/a1/99/87a1998f297911bcd12796200f7c8904.jpg"
+
+
+
+names(df)[6] <- "StarColor"
+names(df)[7] <- "SpektralClass"
+
+#df1 <- df1 %>%
+#  select("StarColor", "SpektralClass")
+
+
+#df<- df[, -c(7,6)]
+
+
+
+levels(df$`Star type`) <- c("sifir", "bir", "iki","uc","dort","bes")
+names(df)[5] <- "Type"
+
+names(data)[1:5] <- c("Temperature..K.","Luminosity.L.Lo." , "Radius.R.Ro.", "Absolute.magnitude.Mv.", "Star.type")
+```
+
+
+# Özet İstatistik
+
+**Verimizin özet istatistiklerinin incelenmesi:**  
+
+```{r echo=FALSE, message=FALSE, warning=FALSE,results='asis'}
+
+
+
+my_controls <- tableby.control(
+  test = T,
+  total = T,
+  numeric.test = "kwt", cat.test = "chisq",
+  numeric.stats = c("meansd", "medianq1q3", "range", "Nmiss2"),
+  cat.stats = c("countpct", "Nmiss2"),
+  stats.labels = list(
+    meansd = "Mean (SD)",
+    medianq1q3 = "Median (Q1, Q3)",
+    range = "Min - Max",
+    Nmiss2 = "Missing"
+  )
+)
+
+tab1 <- tableby(df$Type~. , data=df[,-5], control = my_controls)
+summary(tab1, digits= 1)
+
+```
+
+
+
+
+- Burada değişkenlerin "Type" grupları üzerindeki özet istatistikleri incelenmiştir.
+
+- Type değişkenine göre her bir gözleminden (sıfır, bir iki, üç, dört, beş) 40 adet vardır.
+
+- Temperature (K) değişkenine baktığımızda sıfır gözleminin ortalamasının 2997.9, bir gözleminin ortalamasının 3283.8, iki gözleminin ortalamasının 13931.5, üç gözleminin ortalamasının 16018.0, dört gözleminin ortalamasının 15347.9 ve beş gözleminin ortalamasının 11405.7 olduğunu görmekteyiz. Temperature (K) değişkeni için toplam ortalama ise 10497.5'dir.
+
+- Diğer değişkenlerin de gözlemler üzerindeki ortalamaları çıktıdaki gibidir.
+
+- Ayrıca değişkenlerin gözlemler üzerindeki Medyan, Minimum ve Maksimum değerleri de çıktımızda yer almaktadır.
+
+- Missing değerlerine baktığımızda veri setimizin tüm değişkenlerinde eksik değer yoktur. 
+
+- p değerleri ise tüm değişkenler için 0.001'den küçüktür. p değerleri 0.05’in altında olduğundan bu değişkenler için ilgili gözlemler bakımından aralarında anlamlı bir farklılık vardır yorumunu yapabiliriz.
+
+
+
+# Veri Görselleştirme
+
+## Hedef Değişken ile Saçılım Grafikleri
+
+### Temperature
+```{r warning=FALSE}
+data$Star.type = as.factor(data$Star.type)
+a = ggplot(data,aes(x = seq(1,dim(data)[1]),y = Temperature..K.,colour = Star.type))+geom_point(size = 4)+xlab("")+ylab("Temperatures")+theme_classic()+
+  theme(axis.title.x = element_text(colour = "#fcf2f4"),
+         axis.title.y = element_text(colour = "#fcf2f4"),
+         plot.title = element_text(colour = "#fcf2f4"),
+         axis.text.x  = element_text(colour = "#fcf2f4"),
+         axis.text.y = element_text(colour = "#fcf2f4"),
+         axis.line = element_line(colour = "#fcf2f4"),
+         legend.text = element_text(colour = "#fcf2f4"),
+         legend.title = element_text(colour = "#fcf2f4"))
+ggbackground(a,image)
+```
+
+##$ Luminosity
+
+```{r warning=FALSE}
+c = ggplot(data,aes(x = seq(1,dim(data)[1]),y = Luminosity.L.Lo.,colour = Star.type))+geom_point(size = 4)+xlab("")+ylab("Luminosity")+theme_classic()+
+  theme(axis.title.x = element_text(colour = "#fcf2f4"),
+        axis.title.y = element_text(colour = "#fcf2f4"),
+        plot.title = element_text(colour = "#fcf2f4"),
+        axis.text.x  = element_text(colour = "#fcf2f4"),
+        axis.text.y = element_text(colour = "#fcf2f4"),
+        axis.line = element_line(colour = "#fcf2f4"),
+        legend.text = element_text(colour = "#fcf2f4"),
+        legend.title = element_text(colour = "#fcf2f4"))
+ggbackground(c,image)
+```
+
+
+### Radius
+```{r warning=FALSE}
+
+d = ggplot(data,aes(x = seq(1,dim(data)[1]),y = Radius.R.Ro.,colour = Star.type))+geom_point(size = 4)+xlab("")+ylab("Radius")+theme_classic()+
+  theme(axis.title.x = element_text(colour = "#fcf2f4"),
+        axis.title.y = element_text(colour = "#fcf2f4"),
+        plot.title = element_text(colour = "#fcf2f4"),
+        axis.text.x  = element_text(colour = "#fcf2f4"),
+        axis.text.y = element_text(colour = "#fcf2f4"),
+        axis.line = element_line(colour = "#fcf2f4"),
+        legend.text = element_text(colour = "#fcf2f4"),
+        legend.title = element_text(colour = "#fcf2f4"))
+ggbackground(d,image)
+```
+
+
+### Absolute Magnitude
+```{r warning=FALSE}
+e = ggplot(data,aes(x = seq(1,dim(data)[1]),y = Absolute.magnitude.Mv.,colour = Star.type))+geom_point(size = 4)+xlab("")+ylab("Absolute Magnitude")+theme_classic()+
+  theme(axis.title.x = element_text(colour = "#fcf2f4"),
+        axis.title.y = element_text(colour = "#fcf2f4"),
+        plot.title = element_text(colour = "#fcf2f4"),
+        axis.text.x  = element_text(colour = "#fcf2f4"),
+        axis.text.y = element_text(colour = "#fcf2f4"),
+        axis.line = element_line(colour = "#fcf2f4"),
+        legend.text = element_text(colour = "#fcf2f4"),
+        legend.title = element_text(colour = "#fcf2f4"))
+ggbackground(e,image)
+```
+
+## Density Plot
+
+### Temperature
+```{r warning=FALSE}
+reds <- c("#a506aa", "#0d09f4","#08e0d9")
+treds <- c("#423b3b", "#262424","#000000")
+tred <- "#850000"
+g <- rasterGrob(treds, width = unit(1, "npc"), height = unit(1, "npc"), interpolate = TRUE)
+# Temperature
+d1 = ggplot()+geom_density(data=data, aes(x = Temperature..K.), size=1,fill = tred,colour = tred,alpha = 0.5)+
+  theme_base() + 
+  theme(panel.background=element_blank(),
+        panel.border = element_blank(),
+        plot.background=element_blank(),
+        text = element_text(colour="white"),
+        axis.text.y = element_blank(),
+        line = element_line(colour="white")) +
+  theme()+ylab("")+xlab("Temperature")+ggtitle("Density - Temperature")
+grid.newpage()
+grid.draw(g)
+print(d1,newpage = F)
+```
+
+### Luminosity
+
+
+```{r warning=FALSE}
+d4 = ggplot()+geom_density(data=data, aes(x = Luminosity.L.Lo.), size=1,fill = tred,colour = tred,alpha = 0.5)+
+  theme_base() + 
+  theme(panel.background=element_blank(),
+        panel.border = element_blank(),
+        plot.background=element_blank(),
+        text = element_text(colour="white"),
+        axis.text.y = element_blank(),
+        line = element_line(colour="white")) +
+  theme()+ylab("")+xlab("Luminosity")+ggtitle("Density - Luminosity")
+grid.newpage()
+grid.draw(g)
+print(d4,newpage = F)
+```
+
+
+
+### Radius
+
+```{r warning=FALSE}
+d2 = ggplot()+geom_density(data=data, aes(x = Radius.R.Ro.), size=1,fill = tred,colour = tred,alpha = 0.5)+
+  theme_base() + 
+  theme(panel.background=element_blank(),
+        panel.border = element_blank(),
+        plot.background=element_blank(),
+        text = element_text(colour="white"),
+        axis.text.y = element_blank(),
+        line = element_line(colour="white")) +
+  theme()+ylab("")+xlab("Radius")+ggtitle("Density - Radius")
+grid.newpage()
+grid.draw(g)
+print(d2,newpage = F)
+```
+
+
+### Absoule Magnitude
+
+```{r warning=FALSE}
+d3 = ggplot()+geom_density(data=data, aes(x = Absolute.magnitude.Mv.), size=1,fill = tred,colour = tred,alpha = 0.5)+
+  theme_base() + 
+  theme(panel.background=element_blank(),
+        panel.border = element_blank(),
+        plot.background=element_blank(),
+        text = element_text(colour="white"),
+        axis.text.y = element_blank(),
+        line = element_line(colour="white")) +
+  theme()+ylab("")+xlab("Absolute Magnitude")+ggtitle("Density - Absolute Magnitude")
+grid.newpage()
+grid.draw(g)
+print(d3,newpage = F)
+```
+
+
+# Bağımsız Değişkenlerin Birbirleri ile İkili Karşılaştırmaları
+
+
+```{r echo=TRUE, warning=FALSE,fig.height= 400,fig.height=400,fig.asp=0.618}
+# İkili Karşılaştırmalar
+
+# Temperature~Luminosity
+p1 <- ggplot(data) +
+  geom_point(aes(x = Temperature..K., y = Luminosity.L.Lo., colour = Star.type)) +
+  labs(
+    title = "Temperature ~ Luminosity",
+    x = "Temperature",
+    y = "Luminosity",
+    colour = "Star Type"
+  )+theme(axis.title.x = element_text(colour = "#fcf2f4"),
+                           axis.title.y = element_text(colour = "#fcf2f4"),
+                           plot.title = element_text(colour = "#fcf2f4"),
+                           axis.text.x  = element_text(colour = "#fcf2f4"),
+                           axis.text.y = element_text(colour = "#fcf2f4"),
+                           axis.line = element_line(colour = "#fcf2f4"),
+                           legend.text = element_text(colour = "#fcf2f4"),
+                           legend.title = element_text(colour = "#fcf2f4"))+dark_theme_classic()
+
+p2 <- ggplot(data) +
+  geom_point(aes(x = Temperature..K., y = Radius.R.Ro., colour = Star.type)) +
+  labs(
+    title = "Temperature ~ Radius",
+    x = "Temperature",
+    y = "Radius",
+    colour = "Star Type"
+  )+theme(axis.title.x = element_text(colour = "#fcf2f4"),
+          axis.title.y = element_text(colour = "#fcf2f4"),
+          plot.title = element_text(colour = "#fcf2f4"),
+          axis.text.x  = element_text(colour = "#fcf2f4"),
+          axis.text.y = element_text(colour = "#fcf2f4"),
+          axis.line = element_line(colour = "#fcf2f4"),
+          legend.text = element_text(colour = "#fcf2f4"),
+          legend.title = element_text(colour = "#fcf2f4"))+dark_theme_classic()
+
+p3 <- ggplot(data) +
+  geom_point(aes(x = Temperature..K., y = Absolute.magnitude.Mv., colour = Star.type)) +
+  labs(
+    title = "Temperature ~ Absolute Magnitude",
+    x = "Temperature",
+    y = "Absolute Magnitude",
+    colour = "Star Type"
+  )+theme(axis.title.x = element_text(colour = "#fcf2f4"),
+          axis.title.y = element_text(colour = "#fcf2f4"),
+          plot.title = element_text(colour = "#fcf2f4"),
+          axis.text.x  = element_text(colour = "#fcf2f4"),
+          axis.text.y = element_text(colour = "#fcf2f4"),
+          axis.line = element_line(colour = "#fcf2f4"),
+          legend.text = element_text(colour = "#fcf2f4"),
+          legend.title = element_text(colour = "#fcf2f4"))+dark_theme_classic()
+
+p4 <- ggplot(data) +
+  geom_point(aes(y = Radius.R.Ro., x = Luminosity.L.Lo., colour = Star.type)) +
+  labs(
+    title = "Radius ~ Luminosity",
+    x = "Radius",
+    y = "Luminosity",
+    colour = "Star Type"
+  )+theme(axis.title.x = element_text(colour = "#fcf2f4"),
+          axis.title.y = element_text(colour = "#fcf2f4"),
+          plot.title = element_text(colour = "#fcf2f4"),
+          axis.text.x  = element_text(colour = "#fcf2f4"),
+          axis.text.y = element_text(colour = "#fcf2f4"),
+          axis.line = element_line(colour = "#fcf2f4"),
+          legend.text = element_text(colour = "#fcf2f4"),
+          legend.title = element_text(colour = "#fcf2f4"))+dark_theme_classic()
+
+p5 <- ggplot(data) +
+  geom_point(aes(y = Absolute.magnitude.Mv., x = Luminosity.L.Lo., colour = Star.type)) +
+  labs(
+    title = "Absolute Magnitude ~ Luminosity",
+    x = "Absolute Magnitude",
+    y = "Luminosity",
+    colour = "Star Type"
+  )+theme(axis.title.x = element_text(colour = "#fcf2f4"),
+          axis.title.y = element_text(colour = "#fcf2f4"),
+          plot.title = element_text(colour = "#fcf2f4"),
+          axis.text.x  = element_text(colour = "#fcf2f4"),
+          axis.text.y = element_text(colour = "#fcf2f4"),
+          axis.line = element_line(colour = "#fcf2f4"),
+          legend.text = element_text(colour = "#fcf2f4"),
+          legend.title = element_text(colour = "#fcf2f4"))+dark_theme_classic()
+p6 <- ggplot(data) +
+  geom_point(aes(y = Absolute.magnitude.Mv., x = Radius.R.Ro., colour = Star.type)) +
+  labs(
+    title = "Absolute Magnitude ~ Radius",
+    x = "Absolute Magnitude",
+    y = "Radius",
+    colour = "Star Type"
+  )+theme(axis.title.x = element_text(colour = "#fcf2f4"),
+          axis.title.y = element_text(colour = "#fcf2f4"),
+          plot.title = element_text(colour = "#fcf2f4"),
+          axis.text.x  = element_text(colour = "#fcf2f4"),
+          axis.text.y = element_text(colour = "#fcf2f4"),
+          axis.line = element_line(colour = "#fcf2f4"),
+          legend.text = element_text(colour = "#fcf2f4"),
+          legend.title = element_text(colour = "#fcf2f4"))+dark_theme_classic()
+
+grid.arrange(arrangeGrob(p1,p2,p3,p4,p5,p6,nrow = 3))
+```
+
+
+## Kategorik Değişkenlerin Görselleştirilmesi
+
+### Spectral Class
+
+```{r eval=FALSE, warning=FALSE, include=FALSE}
+sclass = table(data$Spectral.Class)%>%sort(decreasing = F)%>%as.data.frame()
+
+colores <- c("#9206a8", "#e5791b","#140b02","#131193")
+g <- rasterGrob(blues9, width = unit(1, "npc"), height = unit(1, "npc"), interpolate = TRUE)
+
+ggplot(data = sclass,aes(x = Var1,y = Freq,fill = Freq))+
+  scale_fill_gradient(low = "orange", high = "purple")+
+  geom_bar(stat = "identity",width=.8)+
+  dark_theme_classic()+
+  theme(legend.key.height= unit(2, 'cm'))+
+  coord_flip()+
+  labs(title = "Spectral Class",y = "Frequency",x = "Class")
+
+
+
+```
+
+### Star Color
+
+
+```{r eval=FALSE, warning=FALSE, include=FALSE}
+# Kategorik Değişkenler
+starcolor = table(data$Star.color)%>%sort(decreasing = F)%>%as.data.frame()
+colores <- c("#9206a8", "#e5791b","#140b02","#131193")
+
+ggplot(data = starcolor,aes(x = Var1,y = Freq,fill = Freq))+
+  scale_fill_gradient(low = "orange", high = "purple")+
+  geom_bar(stat = "identity",width=.8)+
+  dark_theme_classic()+
+  theme(legend.key.height= unit(2, 'cm'))+
+  coord_flip()+
+  labs(title = "Star Color",y = "Frequency",x = "Colors")
+
+```
+
+
+# Aykırı Değer İnceleme
+```{r warning=FALSE}
+ggthemr_reset()
+boxplot(df[,1:4])
+
+
+```
+
+- Elde ettiğimiz grafiğe baktığımızda Luminosity(L/Lo) değişkeni için birçok aykırı değer bulunmaktadır. Diğer Temperature (K) ve Radius(R/Ro) değişkenlerde ise bir ya da iki tane aykırı değer bulunmaktadır.
+
+
+# Değişkenlerin Korelasyon Değerleri
+```{r warning=FALSE}
+ggthemr('earth', type = 'outer')
+lowerFn <- function(data, mapping, method = "lm", ...) {
+  p <- ggplot(data = data, mapping = mapping) +
+    geom_point(colour = "blue") +
+    geom_smooth(method = method, color = "red", ...)
+  p
+}
+
+ggpairs(
+  df[, 1:4], lower = list(continuous = wrap(lowerFn, method = "lm")),
+  diag = list(continuous = wrap("barDiag", colour = "blue")),
+  upper = list(continuous = wrap("cor", size = 6))
+)
+```
+
+Yukarıdaki grafikte değişkenlerin saçılım grafikleri ve diğer değişkenlerle olan korelasyon değerleri yer almaktadır.
+
+Temperature (K) değişkeni için: Luminosity(L/Lo) değişkeni ile arasındaki korelasyon değeri 0.393 olup pozitif yönde zayıf, Radius(R/Ro) değişkeni ile arasındaki korelasyon değeri 0.064 olup pozitif yönde çok zayıf, Absolute magnitude(Mv) değişkeni ile arasındaki korelasyon değeri -0.420 olup negatif yönde orta şiddette bir ilişki vardır.
+
+Luminosity(L/Lo) değişkeni için: Temperature (K) değişkeni ile arasındaki korelasyon değeri 0.393 olup pozitif yönde zayıf, Radius(R/Ro) değişkeni ile arasındaki korelasyon değeri 0.527 olup pozitif yönde orta şiddette, Absolute magnitude(Mv) değişkeni ile arasındaki korelasyon değeri -0.693 olup negatif yönde güçlü bir ilişki vardır.
+
+Radius(R/Ro) değişkeni için: Temperature (K) değişkeni ile arasındaki korelasyon değeri 0.064 olup pozitif yönde çok zayıf, Luminosity(L/Lo) değişkeni ile arasındaki korelasyon değeri 0.527 olup pozitif yönde orta şiddette, Absolute magnitude(Mv) değişkeni ile arasındaki korelasyon değeri -0.609 olup negatif yönde güçlü bir ilişki vardır.
+
+Absolute magnitude(Mv) değişkeni için: Temperature (K) değişkeni ile arasındaki korelasyon değeri -0.420 olup negatif yönde orta şiddette, Luminosity(L/Lo) değişkeni ile arasındaki korelasyon değeri -0.693 olup negatif yönde güçlü, Radius(R/Ro) değişkeni ile arasındaki korelasyon değeri -0.609 olup negatif yönde güçlü bir ilişki vardır.
+
+
+İlaveten değişkenlerin korelasyon değerleri aşağıdaki grafikte de yer almaktadır.
+
+```{r warning=FALSE}
+ggthemr_reset()
+ggcorr(df[,1:4], palette = "RdYlGn", name = "rho", 
+       label = T,hjust = .35, size = 3, color = "black")
+```
+
+
+# Test Train Ayrımı ve Dummy Değişkenleri Atama 
+
+Diğer veri madenciliği yöntemlerinde olduğu gibi DVM ile bir sınıflama problemi uygulamasında da modelin performansını örneklem dışı (out-of-sample) veri setinde değerlendirmek yani genelleme yeteneğini ortaya çıkarmak amacıyla, veri seti eğitim () test () setleri şeklinde iki alt gruba ayrılır. Bu ayrılma işlemi için yenilenebilir özelliğinin sağlanabilmesi amacıyla seed fonksiyonu kullanılabilir.
+
+```{r echo=TRUE, warning=FALSE}
+set.seed(121520824)
+library(dummies)
+
+categorical_col= c("StarColor","SpektralClass")
+
+#df = dummy.data.frame(df,categorical_col)
+data <- dummy_cols(df, 
+                   select_columns = c("StarColor","SpektralClass"))
+
+
+data <- data[, -c(7)]
+data <- data[, -c(6)]
+split = createDataPartition(data$Type, p = 0.80, list = FALSE)
+train_data = data[split,]
+train_data_x <- train_data[,-5]
+train_data_x <-scale(train_data_x[,1:4] )
+train_data_x1 <- cbind(train_data_x,train_data[,6:29] )
+
+test_data = data[-split,]
+test_data_x <- test_data[,-5]
+
+test_data_x  <- scale(test_data_x[,1:4]  )
+test_data_x1 <- cbind(test_data_x  , test_data[,6:29])
+```
+
+Burada createDataPartition() fonksiyonunda 3 parametre kullanıldı:
+
+“y” parametresi, verilerin bölümlenmesi gereken değişkenin değerini ifade eder. Bu uygulamada hedef değişken Type olduğundan data$Type olarak belirtilir.
+
+“p” parametresi 0-1 aralığında ondalık değeri ifade eder ve bölünmenin yüzdesini göstermek için kullanılır. Bu uygulamada p=0.8 kullanılır. Yani veriyi bölme işlemimiz 80:20 oranında yapılmıştır ve verilerin %80’i eğitim için, kalan %20’si ise modeli test etmek için kullanılır. Veri setimizde toplamda 240 gözlem vardır. Bunun %80'ine eşit olan yani 192 tanesi train, 48 tanesini ise test olarak ayrılmıştır.
+
+“list” parametresi, bir liste mi yoksa matris mi oluşturulacağını belirlemek için kullanılır. Bu uygulamada liste oluşturulmayacağı için FALSE seçeneği seçilir.
+
+
+
+#  Model
+------------------------------------------------------------------------------------------------------------------------------
+
+Veri setini sınıflamayı gerçekleştirecek modelin tanımlaması aşağıdaki gibidir.
+
+- Üstte bulunan saçılım grafiklerinden de görülebileceği gibi veri lineer sınıflandrmaya uygun değildir. Doğrusal ayrılamaz ve hepsi bir grupta kümelendirilemezler.
+
+- Bu sebeple kernel olarak "radial" seçilmiştir.
+
+- Ceza parametresi olan cost 10,  gamma değişkeni 0.001 olarak ayarlanmıştır. Bu değerler daha sonra optimize edilicektir.
+
+------------------------------------------------------------------------------------------------------------------------------
+
+```{r warning=FALSE}
+classifier = svm(formula = train_data$Type~ .,
+                 data = train_data_x1 ,
+                 type = 'C-classification',
+                 kernel = 'radial' ,gamma=0.001, cost=10)
+# summary(classifier)
+```
+
+
+# Predict
+
+caret paketi, sonuçları tahmin etmek için predict() fonksiyonunu içermektedir. predict() fonksiyonu 2 argüman/parametre içermektedir: “classifier” eğitimi gerçekleştirilen modeli belirtmek amacıyla kullanılır. “newdata” test veri setini belirtmek amacıyla kullanılır.
+
+predict() fonksiyonu ile bir liste oluşturur ve bu sonuçları ‘y_pred’ isimli bir değişkene kaydederiz.
+
+```{r warning=FALSE}
+y_pred = predict(classifier, newdata = test_data_x1)
+```
+
+# Karar Matrisleri
+
+- Bu noktada, oluşturulan DVM modelinin sınıflama performansını confusion matrix (karşılık matrisini) ile değerlendirebiliriz.
+
+- Aşağıdaki sonuçlar, test veri için model doğruluğunun, bir başka ifade ile doğru sınıflama yüzdesinin %92 olduğunu göstermektedir.
+
+- confusionMatrix fonksiyonu ile yaptığımız bu performans değerlendirmesini cfm değişkenine atayıp daha sonra ggplotConfusionMatrix fonksiyonu ile grafiğini çizdirebiliriz. Elde edilen grafikte model doğrulunun yüzdesininin bağımlı değişkenimizin kategorileri üzerindeki dağılımını göstermektedir. Grafik aşağıdaki gibidir.
+
+```{r warning=FALSE}
+library(cvms)
+library(tibble)
+
+#onf_mat <- confusion_matrix(targets = test_data$Type,
+                            # predictions = y_pred)
+
+##lot_confusion_matrix(conf_mat$`Confusion Matrix`[[1]], add_sums = FALSE)
+cfm <- confusionMatrix(y_pred, test_data$Type)
+
+ggthemr('earth', type = 'outer')
+ggplotConfusionMatrix <- function(m){
+  mytitle <- paste("Accuracy", percent_format()(m$overall[1]),
+                   "Kappa", percent_format()(m$overall[2]))
+  p <-
+    ggplot(data = as.data.frame(m$table) ,
+           aes(x = Reference, y = Prediction)) +
+    geom_tile(aes(fill = log(Freq)), colour = "black") +
+    scale_fill_gradient(low = "pink", high = "brown") +
+    geom_text(aes(x = Reference, y = Prediction, label = Freq)) +
+    theme(legend.position = "none") +
+     #ggthemr('fresh', type = 'outer') +
+    ggtitle(mytitle)
+  return(p)
+}
+
+ggplotConfusionMatrix(cfm)
+
+```
+
+
+
+
+# MODEL Tuning
+
+- Oluşturulan doğrusal sınıflandırıcıda farklı parametre değerleriyle bazı özelleştirmeler yapılabilir. Bu işlem, öncelikle farklı grid search (ızgara araması) değerleri ile gerçekleştirilebilir. expand.grid() fonksiyonu kullanılarak, "sigma" ve “C”nin bazı değerleri “grid” veri çerçevesine atıyoruz. Sonraki adım, oluşturulan sınıflandırıcıyı belirli "sigma" ve “C” değerlerinde test etmek için bu “svm_grid” veri çerçevesini kullanmaktır. Bunun için tuneGrid parametresini, train() fonksiyonuna ilave ediyoruz.
+
+```{r echo=TRUE, warning=FALSE}
+set.seed(121520824)
+
+ctrl <- trainControl(method = "cv",
+                     summaryFunction =  multiClassSummary, # 6 sınıfımız olduğu için
+                     classProbs = TRUE)
+
+svm_grid <- expand.grid(sigma = c(0.01, 0.015, 0.2,0.1),
+                        C = c(0.1, 0.9, 1, 1.1, 1.25, 10))
+
+svm_tune <- train(train_data_x1, train_data$Type,
+                   method = "svmRadial",
+                   metric = "ROC",
+                   tuneGrid = svm_grid,
+                   trControl = ctrl)
+
+```
+
+```{r echo=TRUE, warning=FALSE}
+ggthemr('earth', type = 'outer')
+plot(svm_tune)
+```
+
+- Yukarıdaki grafik eğitimi gerçekleştirilen DVM modeli sınıflandırıcısının sigma = 0.1 ve C = 10 değerlerinde en iyi doğruluğu verdiğini göstermektedir. Bu noktada, test seti için bu model kullanılarak tahminler elde edebiliriz.
+
+- Tuning edilmiş modelin  tahminlerine bakabilir ve  bu son DVM modelinin sınıflama performansını da confusion matrix (karşılık matrisini) ile değerlendiririz.
+
+- Confusion matrix sonuçları bu kez test setindeki doğruluğun **% 95** olduğunu ve bu son DVM modelinin sınıflama peformansının daha yüksek doğru olduğunu göstermektedir.
+
+
+
+Yukarıda da uyguladığımız gibi ggplotConfusionMatrix fonksiyonu ile yeni elde ettiğimiz modelin sınıflama performansının grafiğini aşağıdaki gibi çizdiririz. Elde edilen grafikte model doğrulunun yüzdesininin bağımlı değişkenimizin kategorileri üzerindeki dağılımını göstermektedir. Yeni oluşturulan grafik aşağıdaki gibidir.
+
+```{r echo=TRUE, warning=FALSE}
+y_pred <- predict(svm_tune, test_data_x1)
+
+
+
+cfm <- confusionMatrix(y_pred, test_data$Type)
+
+```
+
+
+
+
+
+```{r warning=FALSE}
+ggthemr('earth', type = 'outer')
+ggplotConfusionMatrix <- function(m){
+  mytitle <- paste("Accuracy", percent_format()(m$overall[1]),
+                   "Kappa", percent_format()(m$overall[2]))
+  p <-
+    ggplot(data = as.data.frame(m$table) ,
+           aes(x = Reference, y = Prediction)) +
+    geom_tile(aes(fill = log(Freq)), colour = "black") +
+    scale_fill_gradient(low = "pink", high = "brown") +
+    geom_text(aes(x = Reference, y = Prediction, label = Freq)) +
+    theme(legend.position = "none") +
+     #ggthemr('fresh', type = 'outer') +
+    ggtitle(mytitle)
+  return(p)
+}
+
+ggplotConfusionMatrix(cfm)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
